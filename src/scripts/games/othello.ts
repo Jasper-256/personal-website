@@ -52,7 +52,7 @@ function drawPiece(cx: number, cy: number, color: Cell, scaleX = 1, scale = 1): 
   ctx.scale(scaleX * scale, scale);
   ctx.beginPath();
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
-  ctx.fillStyle = color === BLACK ? "#1a1a1a" : "#f0f0f0";
+  ctx.fillStyle = color === BLACK ? "#1a1a1a" : "#f8f8f8";
   ctx.fill();
   ctx.strokeStyle = color === BLACK ? "#000" : "#ccc";
   ctx.lineWidth = 1;
