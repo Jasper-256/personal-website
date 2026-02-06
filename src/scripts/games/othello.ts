@@ -54,7 +54,7 @@ function drawPiece(cx: number, cy: number, color: Cell, scaleX = 1, scale = 1): 
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
   ctx.fillStyle = color === BLACK ? "#1a1a1a" : "#f8f8f8";
   ctx.fill();
-  ctx.strokeStyle = color === BLACK ? "#000" : "#ccc";
+  ctx.strokeStyle = color === BLACK ? "#000" : "#c8c8c8";
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.restore();
@@ -185,6 +185,11 @@ function draw(): void {
   // Score
   const counts = countPieces(board);
   scoreEl.textContent = `Black: ${counts.black} | White: ${counts.white}`;
+
+  // Game over overlay
+  if (gameOver) {
+    drawGameOverOverlay();
+  }
 }
 
 function animateMove(row: number, col: number, player: Cell, flips: Pos[], callback: () => void): void {
@@ -216,8 +221,12 @@ function animateMove(row: number, col: number, player: Cell, flips: Pos[], callb
 // ---- Game Flow ----
 
 function colorName(c: Cell): string {
-  return c === BLACK ? "Black" : "White";
+  return c === BLACK ? "black" : "white";
 }
+
+let gameOverOverlayAlpha = 0;
+let gameOverMessage = "";
+let gameOverScore = "";
 
 function checkGameEnd(): boolean {
   const playerMoves = getValidMoves(board, playerColor);
@@ -227,20 +236,61 @@ function checkGameEnd(): boolean {
     const counts = countPieces(board);
     const playerCount = playerColor === BLACK ? counts.black : counts.white;
     const aiCount = playerColor === BLACK ? counts.white : counts.black;
-    if (playerCount > aiCount) statusEl.textContent = `You win! ${playerCount}-${aiCount}`;
-    else if (aiCount > playerCount) statusEl.textContent = `Computer wins. ${aiCount}-${playerCount}`;
-    else statusEl.textContent = `Draw. ${playerCount}-${aiCount}`;
-    draw();
+    statusEl.textContent = "Game over";
+    if (playerCount > aiCount) {
+      gameOverMessage = "You win!";
+      gameOverScore = `${playerCount} - ${aiCount}`;
+    } else if (aiCount > playerCount) {
+      gameOverMessage = "Computer wins";
+      gameOverScore = `${aiCount} - ${playerCount}`;
+    } else {
+      gameOverMessage = "Draw";
+      gameOverScore = `${playerCount} - ${aiCount}`;
+    }
+    gameOverOverlayAlpha = 0;
+    animateGameOverOverlay();
     return true;
   }
   return false;
+}
+
+function animateGameOverOverlay(): void {
+  gameOverOverlayAlpha = Math.min(gameOverOverlayAlpha + 0.04, 1);
+  draw();
+  if (gameOverOverlayAlpha < 1) {
+    requestAnimationFrame(animateGameOverOverlay);
+  }
+}
+
+function drawGameOverOverlay(): void {
+  const alpha = gameOverOverlayAlpha;
+  if (alpha <= 0) return;
+
+  // Darken the board
+  ctx.fillStyle = `rgba(0, 0, 0, ${0.5 * alpha})`;
+  ctx.fillRect(0, 0, BOARD_PX, BOARD_PX);
+
+  // Message text
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 40px Menlo, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(gameOverMessage, BOARD_PX / 2, BOARD_PX / 2 - 20);
+
+  // Score subtitle
+  ctx.font = "24px Menlo, monospace";
+  ctx.fillStyle = "#ccc";
+  ctx.fillText(gameOverScore, BOARD_PX / 2, BOARD_PX / 2 + 25);
+  ctx.restore();
 }
 
 function handlePlayerTurn(): void {
   if (gameOver) return;
   const moves = getValidMoves(board, playerColor);
   if (moves.length === 0) {
-    statusEl.textContent = "No moves - your turn was skipped";
+    statusEl.textContent = "Your turn was skipped";
     currentTurn = aiColor;
     draw();
     setTimeout(handleAiTurn, GAME_DELAY + 375);
@@ -254,7 +304,7 @@ function handleAiTurn(): void {
   if (gameOver) return;
   const moves = getValidMoves(board, aiColor);
   if (moves.length === 0) {
-    statusEl.textContent = "No moves - computer's turn was skipped";
+    statusEl.textContent = "Computer's turn was skipped";
     currentTurn = playerColor;
     draw();
     setTimeout(handlePlayerTurn, GAME_DELAY + 375);
@@ -271,7 +321,7 @@ function handleAiTurn(): void {
   });
 }
 
-const GAME_DELAY = 300;
+const GAME_DELAY = 200;
 let aiThinkStart = 0;
 
 function applyAiMove(move: Pos | null): void {
@@ -355,6 +405,9 @@ newGameEl.addEventListener("click", () => {
   flipAnims = [];
   placedPiece = null;
   animCallback = null;
+  gameOverOverlayAlpha = 0;
+  gameOverMessage = "";
+  gameOverScore = "";
   if (currentTurn === aiColor) {
     handleAiTurn();
   } else {
