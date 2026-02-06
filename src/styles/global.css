@@ -79,6 +79,7 @@ select {
   body {
     background-color: #141414;
     color: #d0d0d0;
+    color-scheme: dark;
   }
 
   hr {
