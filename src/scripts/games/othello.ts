@@ -321,7 +321,7 @@ function handleAiTurn(): void {
   });
 }
 
-const GAME_DELAY = 200;
+const GAME_DELAY = 1000;
 let aiThinkStart = 0;
 
 function applyAiMove(move: Pos | null): void {
