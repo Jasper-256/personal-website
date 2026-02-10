@@ -2,8 +2,8 @@
 import Layout from '@/layouts/Layout.astro';
 ---
 
-<Layout title="Tic Tac Toe - Jasper Morgal">
-    <h1>Tic Tac Toe</h1>
+<Layout title="Tic-tac-toe - Jasper Morgal">
+    <h1>Tic-tac-toe</h1>
     <p>
         <div>&nbsp;______&nbsp;______&nbsp;______&nbsp;</div>
 
@@ -97,8 +97,8 @@ import Layout from '@/layouts/Layout.astro';
 
         <div>|______|______|______|</div>
     </p>
-    <p id="winloss">You Go First</p>
-    <p class="pointer" id="clear" hidden onclick="clr()">Reset</p>
+    <p id="status">Your turn (X)</p>
+    <p class="pointer" id="newgame" onclick="clr()">New game</p>
     <script is:inline src="/games/tictactoe.js"></script>
 </Layout>
 
