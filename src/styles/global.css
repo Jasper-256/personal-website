@@ -64,6 +64,12 @@ select {
   border-radius: 10px 10px 10px 10px;
 }
 
+.pointer {
+  cursor: pointer;
+  width: fit-content;
+  margin: 0 auto;
+}
+
 @media (max-width: 550px) {
   .topnav {
     display: flex;

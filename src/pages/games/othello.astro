@@ -35,15 +35,9 @@ import Layout from "@/layouts/Layout.astro";
   select {
     vertical-align: top;
   }
-  .pointer {
-    cursor: pointer;
-    width: fit-content;
-    margin: 0 auto;
-  }
   canvas {
     display: block;
-    max-width: 480px;
-    width: 100%;
+    width: min(100%, 60vh);
     aspect-ratio: 1 / 1;
     border-radius: 4px;
     margin: 0 auto;
