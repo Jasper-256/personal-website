@@ -1,0 +1,71 @@
+---
+import Layout from "@/layouts/Layout.astro";
+---
+
+<Layout title="Qubic - Jasper Morgal">
+  <h1>Qubic</h1>
+  <div id="game-container">
+    <div id="game-over">
+      <p id="game-over-msg"></p>
+    </div>
+  </div>
+  <p id="status">Your turn (blue)</p>
+  <p>
+    Minimax depth:
+    <label>
+      <select id="depth">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+    </label>
+  </p>
+  <p class="pointer" id="newgame">New game</p>
+  <script>
+    import "@/scripts/games/qubic";
+  </script>
+</Layout>
+
+<style>
+  p {
+    font-family: "Menlo", monospace;
+  }
+  select {
+    vertical-align: top;
+  }
+  .pointer {
+    cursor: pointer;
+    width: fit-content;
+    margin: 0 auto;
+  }
+  #game-container {
+    position: relative;
+    max-width: 480px;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #game-over {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s;
+    border-radius: 4px;
+  }
+  #game-over.visible {
+    opacity: 1;
+  }
+  #game-over-msg {
+    color: #fff;
+    font-size: 32px;
+    font-weight: bold;
+  }
+</style>
