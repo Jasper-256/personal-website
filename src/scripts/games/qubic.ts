@@ -29,22 +29,35 @@ let winLine: number[] | null = null;
 // ---- Three.js setup ----
 
 const scene = new THREE.Scene();
-const ZOOM = 1;
-const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+const ZOOM = 1.25;
+const camera = new THREE.PerspectiveCamera(18, 1, 0.1, 200);
 // Slightly askew from a direct corner view
-camera.position.set(10 * ZOOM, 3.75 * ZOOM, 7.5 * ZOOM);
+camera.position.set(16 * ZOOM, 6 * ZOOM, 12 * ZOOM);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 container.appendChild(renderer.domElement);
 
+const DEFAULT_CAM_POS = new THREE.Vector3(16 * ZOOM, 6 * ZOOM, 12 * ZOOM);
+const DEFAULT_CAM_TARGET = new THREE.Vector3(0, 0, 0);
+
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.1;
 controls.enablePan = false;
-controls.minDistance = 6;
-controls.maxDistance = 16;
+controls.minDistance = 10;
+controls.maxDistance = 30;
 controls.target.set(0, 0, 0);
+
+// ---- Camera reset animation ----
+
+let cameraResetting = false;
+let lastFrame: number | null = null;
+const RESET_SPEED = 15;
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "r" || e.key === "R") cameraResetting = true;
+});
 
 // ---- Lighting ----
 
@@ -59,7 +72,7 @@ scene.add(dirLight2);
 // ---- Board constants ----
 
 const SPACING = 1.2;
-const LAYER_SPACING = 1.2;
+const LAYER_SPACING = 2.0;
 
 function cellPos(l: number, r: number, c: number): THREE.Vector3 {
   return new THREE.Vector3((c - 1.5) * SPACING, (l - 1.5) * LAYER_SPACING, (r - 1.5) * SPACING);
@@ -418,6 +431,31 @@ function animate(): void {
     if (mesh) mesh.scale.setScalar(easeOutBack(t));
     if (t >= 1) pieceAnims.splice(i, 1);
   }
+
+  // Smooth camera reset (spherical interpolation to avoid cutting through center)
+  if (cameraResetting) {
+    const dt = Math.min((performance.now() - (lastFrame ?? now)) / 1000, 0.05);
+    const t = 1 - Math.exp(-RESET_SPEED * dt);
+
+    // Interpolate direction via slerp, distance via scalar lerp
+    const curDir = camera.position.clone().sub(controls.target).normalize();
+    const defDir = DEFAULT_CAM_POS.clone().sub(DEFAULT_CAM_TARGET).normalize();
+    const curDist = camera.position.distanceTo(controls.target);
+    const defDist = DEFAULT_CAM_POS.distanceTo(DEFAULT_CAM_TARGET);
+
+    curDir.lerp(defDir, t).normalize();
+    const newDist = curDist + (defDist - curDist) * t;
+
+    controls.target.lerp(DEFAULT_CAM_TARGET, t);
+    camera.position.copy(controls.target).addScaledVector(curDir, newDist);
+
+    if (camera.position.distanceTo(DEFAULT_CAM_POS) < 0.15) {
+      camera.position.copy(DEFAULT_CAM_POS);
+      controls.target.copy(DEFAULT_CAM_TARGET);
+      cameraResetting = false;
+    }
+  }
+  lastFrame = now;
 
   controls.update();
   renderer.render(scene, camera);
