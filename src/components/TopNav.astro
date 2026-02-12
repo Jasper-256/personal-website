@@ -1,13 +1,9 @@
 ---
-interface Props {
-  activePage?: "home" | "projects" | "games";
-}
 
-const { activePage } = Astro.props;
 ---
 
 <div class="topnav">
-  <a class={`nav-home ${activePage === "home" ? "active" : ""}`} href="/">
+  <a class={`nav-home`} href="/">
     <img src="/favicon-180x180.png" alt="" class="nav-avatar" />
     Jasper Morgal
   </a>

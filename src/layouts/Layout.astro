@@ -4,7 +4,7 @@ import TopNav from "@/components/TopNav.astro";
 
 interface Props {
   title: string;
-  activePage?: "home" | "projects" | "games";
+  activePage?: "home";
   faviconPath?: string;
 }
 
@@ -21,7 +21,7 @@ const { title, activePage, faviconPath = "" } = Astro.props;
     <title>{title}</title>
   </head>
   <body>
-    {activePage !== "home" && <TopNav activePage={activePage} />}
+    {activePage !== "home" && <TopNav />}
     <slot />
   </body>
 </html>
