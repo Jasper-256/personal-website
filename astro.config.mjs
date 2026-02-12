@@ -12,5 +12,7 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
   },
-  redirects: {},
+  redirects: {
+    "/projects/time/percent_time_raw": "/time/percent-time-raw",
+  },
 });
