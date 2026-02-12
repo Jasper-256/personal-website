@@ -3,12 +3,50 @@ import Layout from "@/layouts/Layout.astro";
 ---
 
 <Layout title="Jasper Morgal" activePage="home">
-  <img src="/jasper-morgal.jpg" alt="Picture of Jasper Morgal" style="width: 175px; height: 175px; border-radius: 50%; display: flex; margin: 0 auto; margin-top: 20px;" />
+  <img src="/jasper-morgal.jpg" alt="Picture of Jasper Morgal" style="width: 165px; height: 165px; border-radius: 50%; display: flex; margin: 0 auto; margin-top: 20px;" />
   <h1>Jasper Morgal</h1>
   <p>
-    <a href="/about">About Website</a> |
     <a href="https://github.com/Jasper-256">GitHub</a> |
     <a href="https://www.linkedin.com/in/jasper-morgal/">LinkedIn</a> |
     <a href="mailto:jpmorgal8@gmail.com">Email</a>
   </p>
+  <br />
+  <div class="columns">
+    <div class="column">
+      <h2>Projects</h2>
+      <p><a href="/projects/chat">Public Chat</a></p>
+      <p><a href="/projects/population">World Population</a></p>
+      <h2>Time Formats</h2>
+      <p><a href="/projects/time">All Time Formats</a></p>
+      <p><a href="/projects/time/percent-time">Percent Time</a></p>
+      <p><a href="/projects/time/unix-prime">Unix Time Prime Factorization</a></p>
+      <p><a href="/projects/time/universe-age">Age of the Universe</a></p>
+    </div>
+    <div class="column">
+      <h2>Games</h2>
+      <p><a href="/games/tictactoe">Tic-tac-toe</a></p>
+      <p><a href="/games/othello">Othello</a></p>
+      <p><a href="/games/qubic">Qubic</a></p>
+      <p><a href="/games/pfc">Prime Factorization Challenge</a></p>
+    </div>
+  </div>
+
+  <style>
+    .columns {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      align-items: flex-start;
+    }
+    .column :first-child {
+      margin-top: 0;
+    }
+    @media (max-width: 550px) {
+      .columns {
+        flex-direction: column;
+        gap: 0px;
+        align-items: center;
+      }
+    }
+  </style>
 </Layout>

@@ -7,7 +7,21 @@ const { activePage } = Astro.props;
 ---
 
 <div class="topnav">
-  <a class={activePage === "home" ? "active" : ""} href="/">Home</a>
-  <a class={activePage === "projects" ? "active" : ""} href="/projects">Projects</a>
-  <a class={activePage === "games" ? "active" : ""} href="/games">Games</a>
+  <a class={`nav-home ${activePage === "home" ? "active" : ""}`} href="/">
+    <img src="/favicon-180x180.png" alt="" class="nav-avatar" />
+    Jasper Morgal
+  </a>
 </div>
+
+<style>
+  .nav-home {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nav-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+  }
+</style>

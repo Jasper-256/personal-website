@@ -50,18 +50,9 @@ select {
   color: black;
   float: left;
   text-align: center;
-  padding: 14px 14px;
+  padding: 12px 12px;
+  padding-bottom: 8px;
   text-decoration: none;
-}
-
-.topnav a:hover {
-  color: #5392da;
-}
-
-.topnav a.active {
-  background-color: #5392da;
-  color: white;
-  border-radius: 10px 10px 10px 10px;
 }
 
 .pointer {
@@ -106,14 +97,5 @@ select {
 
   .topnav a {
     color: #d0d0d0;
-  }
-
-  .topnav a:hover {
-    color: #366192;
-  }
-
-  .topnav a.active {
-    background-color: #366192;
-    color: white;
   }
 }

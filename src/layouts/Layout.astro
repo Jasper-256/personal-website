@@ -21,7 +21,7 @@ const { title, activePage, faviconPath = "" } = Astro.props;
     <title>{title}</title>
   </head>
   <body>
-    <TopNav activePage={activePage} />
+    {activePage !== "home" && <TopNav activePage={activePage} />}
     <slot />
   </body>
 </html>
