@@ -13,7 +13,7 @@ export function idx(r: number, c: number): number {
 
 export function fromIdx(i: number): [number, number] {
   let r = 0;
-  while ((r + 1) * (r + 2) / 2 <= i) r++;
+  while (((r + 1) * (r + 2)) / 2 <= i) r++;
   return [r, i - (r * (r + 1)) / 2];
 }
 

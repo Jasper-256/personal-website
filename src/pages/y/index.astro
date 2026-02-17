@@ -1,0 +1,42 @@
+---
+import Layout from "@/layouts/Layout.astro";
+---
+
+<Layout title="Y - Jasper Morgal">
+  <h1>Y</h1>
+  <canvas id="board"></canvas>
+  <p id="status">Your turn (red)</p>
+  <p id="swap-container"></p>
+  <p>
+    MCTS iterations:
+    <label>
+      <select id="iterations">
+        <option value="1000">1000</option>
+        <option value="2000">2000</option>
+        <option value="5000" selected>5000</option>
+        <option value="10000">10000</option>
+        <option value="20000">20000</option>
+      </select>
+    </label>
+  </p>
+  <p class="pointer" id="newgame">New game</p>
+  <p><a href="/y/friend">Play with a friend</a></p>
+  <script>
+    import "@/scripts/y";
+  </script>
+</Layout>
+
+<style>
+  p {
+    font-family: "Menlo", monospace;
+  }
+  select {
+    vertical-align: top;
+  }
+  canvas {
+    display: block;
+    width: min(100%, 62vh);
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+  }
+</style>
