@@ -69,7 +69,7 @@ function newGame() {
   redraw();
 }
 
-const redraw = setupEvents((i) => i < 0 || state.board[i] === EMPTY, makeMove);
+const redraw = setupEvents((i) => !state.gameOver && (i < 0 || state.board[i] === EMPTY), makeMove);
 
 newGameEl.addEventListener("click", newGame);
 resize();

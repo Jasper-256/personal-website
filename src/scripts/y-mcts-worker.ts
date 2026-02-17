@@ -69,9 +69,7 @@ function bestChild(node: MCTSNode, C: number): MCTSNode {
   return best;
 }
 
-function mcts(board: Cell[], turn: Cell, n: number, iterations: number, C: number): number {
-  const root = createNode(-1, null, turn, board, n);
-
+function runIterations(root: MCTSNode, board: Cell[], n: number, iterations: number, C: number) {
   for (let iter = 0; iter < iterations; iter++) {
     let node = root;
     const b = board.slice();
@@ -111,8 +109,9 @@ function mcts(board: Cell[], turn: Cell, n: number, iterations: number, C: numbe
       node = node.parent!;
     }
   }
+}
 
-  // Pick the child with the most visits
+function pickBestMove(root: MCTSNode): number {
   let bestMove = -1;
   let mostVisits = -1;
   for (const child of root.children) {
@@ -124,8 +123,76 @@ function mcts(board: Cell[], turn: Cell, n: number, iterations: number, C: numbe
   return bestMove;
 }
 
-self.onmessage = (e: MessageEvent<{ board: Cell[]; turn: Cell; n: number; iterations: number; C: number }>) => {
+// Persistent state for tree reuse across turns
+let prevRoot: MCTSNode | null = null;
+let prevBoard: Cell[] | null = null;
+
+/**
+ * Try to reuse the tree from the previous search by walking down
+ * through the moves that were played since then.
+ */
+function tryReuseTree(board: Cell[], turn: Cell, n: number): MCTSNode | null {
+  if (!prevRoot || !prevBoard) return null;
+
+  const total = totalCells(n);
+  // Find cells that were filled since last search
+  const newMoves: number[] = [];
+  for (let i = 0; i < total; i++) {
+    if (prevBoard[i] === EMPTY && board[i] !== EMPTY) {
+      newMoves.push(i);
+    }
+    // If a cell changed color or was un-filled, a swap or reset happened
+    if (prevBoard[i] !== EMPTY && prevBoard[i] !== board[i]) return null;
+  }
+
+  // Walk down the tree through each new move
+  let node: MCTSNode | null = prevRoot;
+  for (const move of newMoves) {
+    const child = node!.children.find((c) => c.move === move);
+    if (!child) return null;
+    node = child;
+  }
+
+  // Verify the turn matches
+  if (!node || node.turn !== turn) return null;
+
+  // Detach from parent to free memory above
+  node.parent = null;
+  return node;
+}
+
+self.onmessage = (e: MessageEvent<{ board: Cell[]; turn: Cell; n: number; iterations: number; C: number; reset?: boolean }>) => {
+  if (e.data.reset) {
+    prevRoot = null;
+    prevBoard = null;
+    return;
+  }
   const { board, turn, n, iterations, C } = e.data;
-  const move = mcts(board, turn, n, iterations, C);
+
+  // Try to reuse the existing tree, otherwise create a fresh root
+  const root = tryReuseTree(board, turn, n) ?? createNode(-1, null, turn, board, n);
+
+  runIterations(root, board, n, iterations, C);
+
+  const move = pickBestMove(root);
+
+  // Persist: save root and board with the AI's move applied for next reuse
+  if (move >= 0) {
+    const nextBoard = board.slice();
+    nextBoard[move] = turn;
+    // Re-root to the chosen child so next turn starts deeper
+    const chosenChild = root.children.find((c) => c.move === move);
+    if (chosenChild) {
+      chosenChild.parent = null;
+      prevRoot = chosenChild;
+    } else {
+      prevRoot = null;
+    }
+    prevBoard = nextBoard;
+  } else {
+    prevRoot = null;
+    prevBoard = null;
+  }
+
   self.postMessage({ move });
 };

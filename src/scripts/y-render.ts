@@ -40,7 +40,7 @@ export function resize() {
 function hexR(): number {
   const w = canvas.width / DPR;
   const h = canvas.height / DPR;
-  const pad = 20;
+  const pad = 6;
   const fromW = (w - pad * 2) / (state.boardSize * S3);
   const fromH = (h - pad * 2) / ((state.boardSize - 1) * 1.5 + 2);
   return Math.min(fromW, fromH);
@@ -102,8 +102,8 @@ export function draw(canHover: boolean) {
   const cellS = s * 0.92;
   const p1Fill = "#d94a4a";
   const p2Fill = "#4a90d9";
-  const emptyFill = dark ? "#2a2a2a" : "#e0d8c8";
-  const borderColor = dark ? "#555" : "#998870";
+  const emptyFill = dark ? "#2a2a2a" : "#dcdcdc";
+  const borderColor = dark ? "#555" : "#aaa";
   const p1Hover = dark ? "rgba(217,74,74,0.4)" : "rgba(217,74,74,0.3)";
   const p2Hover = dark ? "rgba(74,144,217,0.4)" : "rgba(74,144,217,0.3)";
 

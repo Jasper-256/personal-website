@@ -153,6 +153,7 @@ function makeMove(i: number) {
 
 function newGame() {
   playerGoesFirst = !playerGoesFirst;
+  worker.postMessage({ reset: true });
   resetBoard();
   playerColor = playerGoesFirst ? P1 : P2;
   aiColor = playerGoesFirst ? P2 : P1;
@@ -168,7 +169,7 @@ function newGame() {
   }
 }
 
-const redraw = setupEvents((i) => !aiThinking && state.turn === playerColor && (i < 0 || state.board[i] === EMPTY), makeMove);
+const redraw = setupEvents((i) => !state.gameOver && !aiThinking && state.turn === playerColor && (i < 0 || state.board[i] === EMPTY), makeMove);
 
 newGameEl.addEventListener("click", newGame);
 resize();
