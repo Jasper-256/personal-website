@@ -1,148 +1,37 @@
-import { type Cell, EMPTY, P1, P2, totalCells, fromIdx, findWinGroup, isFull } from "./y-board";
+import { type Cell, EMPTY, P1, P2, BOARD_SIZE, totalCells, findWinGroup, isFull, doSwap, state, statusEl, newGameEl, swapContainer, resetBoard, resize, draw, setupEvents } from "./y-render";
 
-const canvas = document.getElementById("board") as HTMLCanvasElement;
-const ctx = canvas.getContext("2d")!;
-const statusEl = document.getElementById("status")!;
-const newGameEl = document.getElementById("newgame")!;
-const swapContainer = document.getElementById("swap-container")!;
 const iterEl = document.getElementById("iterations") as HTMLSelectElement;
-
 const worker = new Worker(new URL("./y-mcts-worker.ts", import.meta.url), { type: "module" });
 
-const DPR = window.devicePixelRatio || 1;
-const S3 = Math.sqrt(3);
-const BOARD_SIZE = 11;
-
-// Pie-rule lookup table: cells that are "strong" enough to steal.
-// Based on centrality = min(dist_left, dist_right, dist_bottom).
-// Cells with centrality >= 2 are considered strong opening moves.
-// Centrality for cell (r,c) on size-n board: min(c, r-c, n-1-r)
+// Pie-rule lookup table: cells with centrality >= 2 are "strong" enough to steal.
+// Centrality for cell (r,c): min(c, r-c, n-1-r)
 const STEAL_SET: Set<number> = (() => {
   const s = new Set<number>();
   const n = BOARD_SIZE;
   for (let r = 0; r < n; r++) {
     for (let c = 0; c <= r; c++) {
-      const centrality = Math.min(c, r - c, n - 1 - r);
-      if (centrality >= 2) s.add((r * (r + 1)) / 2 + c);
+      if (Math.min(c, r - c, n - 1 - r) >= 2) s.add((r * (r + 1)) / 2 + c);
     }
   }
   return s;
 })();
 
-let boardSize = BOARD_SIZE;
-let board: Cell[] = [];
 let playerColor: Cell = P1;
 let aiColor: Cell = P2;
-let turn: Cell = P1;
 let moveCount = 0;
-let gameOver = false;
 let aiThinking = false;
-let winCells: Set<number> | null = null;
-let hoverIdx = -1;
 let playerGoesFirst = true;
 let swapAvailable = false;
 
-const isDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
-
-function resize() {
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * DPR;
-  canvas.height = rect.height * DPR;
-}
-
-function hexR(): number {
-  const w = canvas.width / DPR;
-  const h = canvas.height / DPR;
-  const pad = 20;
-  const fromW = (w - pad * 2) / (boardSize * S3);
-  const fromH = (h - pad * 2) / ((boardSize - 1) * 1.5 + 2);
-  return Math.min(fromW, fromH);
-}
-
-function hexCenter(r: number, c: number): [number, number] {
-  const s = hexR();
-  const cw = canvas.width / DPR;
-  const ch = canvas.height / DPR;
-  const boardH = (boardSize - 1) * 1.5 * s + 2 * s;
-  const oy = (ch - boardH) / 2 + s;
-  return [cw / 2 + (c - r / 2) * S3 * s, oy + r * 1.5 * s];
-}
-
-function hexPath(cx: number, cy: number, s: number) {
-  ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const a = Math.PI / 6 + (i * Math.PI) / 3;
-    const x = cx + s * Math.cos(a);
-    const y = cy + s * Math.sin(a);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-}
-
-function draw() {
-  const s = hexR();
-  const w = canvas.width / DPR;
-  const h = canvas.height / DPR;
-  const dark = isDark();
-
-  ctx.save();
-  ctx.scale(DPR, DPR);
-  ctx.clearRect(0, 0, w, h);
-
-  const total = totalCells(boardSize);
-  const cellS = s * 0.92;
-  const p1Fill = "#d94a4a";
-  const p2Fill = "#4a90d9";
-  const emptyFill = dark ? "#2a2a2a" : "#e0d8c8";
-  const borderColor = dark ? "#555" : "#998870";
-  const playerHover = playerColor === P1 ? (dark ? "rgba(217,74,74,0.4)" : "rgba(217,74,74,0.3)") : dark ? "rgba(74,144,217,0.4)" : "rgba(74,144,217,0.3)";
-
-  for (let i = 0; i < total; i++) {
-    const [r, c] = fromIdx(i);
-    const [cx, cy] = hexCenter(r, c);
-
-    let fill: string;
-    const isWin = winCells?.has(i);
-    if (board[i] === P1) fill = isWin ? "#ff6a6a" : p1Fill;
-    else if (board[i] === P2) fill = isWin ? "#6ab0ff" : p2Fill;
-    else if (i === hoverIdx && !gameOver && !aiThinking && turn === playerColor) fill = playerHover;
-    else fill = emptyFill;
-
-    hexPath(cx, cy, cellS);
-    ctx.fillStyle = fill;
-    ctx.fill();
-    ctx.strokeStyle = isWin ? (board[i] === P1 ? "#ffa0a0" : "#a0d0ff") : borderColor;
-    ctx.lineWidth = isWin ? 2.5 : 1.5;
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
-function hitTest(px: number, py: number): number {
-  const s = hexR();
-  const maxD2 = (s * 0.9) ** 2;
-  const total = totalCells(boardSize);
-  let best = -1;
-  let bestD2 = maxD2;
-  for (let i = 0; i < total; i++) {
-    const [r, c] = fromIdx(i);
-    const [cx, cy] = hexCenter(r, c);
-    const d2 = (px - cx) ** 2 + (py - cy) ** 2;
-    if (d2 < bestD2) {
-      bestD2 = d2;
-      best = i;
-    }
-  }
-  return best;
-}
+const AI_DELAY = 400;
+let aiThinkStart = 0;
 
 function colorName(c: Cell): string {
   return c === P1 ? "Red" : "Blue";
 }
 
 function updateSwapUI() {
-  if (swapAvailable && turn === playerColor) {
+  if (swapAvailable && state.turn === playerColor) {
     swapContainer.innerHTML = '<span class="pointer" id="swap-btn">Steal move</span>';
     document.getElementById("swap-btn")!.addEventListener("click", doPlayerSwap);
   } else {
@@ -150,102 +39,74 @@ function updateSwapUI() {
   }
 }
 
-/** Player (Blue) steals AI's (Red's) opening move */
 function doPlayerSwap() {
   if (!swapAvailable) return;
-  const total = totalCells(boardSize);
-  for (let i = 0; i < total; i++) {
-    if (board[i] === P1) {
-      board[i] = P2;
-      break;
-    }
-  }
+  doSwap();
   swapAvailable = false;
   moveCount = 2;
-  // After swap the piece is now Blue (player's), Red (AI) plays next
-  turn = P1;
   updateSwapUI();
-  draw();
+  redraw();
   handleAiTurn();
 }
 
-/** AI (Blue) steals Player's (Red's) opening move */
 function doAiSwap() {
-  const total = totalCells(boardSize);
-  for (let i = 0; i < total; i++) {
-    if (board[i] === P1) {
-      board[i] = P2;
-      break;
-    }
-  }
+  doSwap();
   swapAvailable = false;
   moveCount = 2;
-  // After swap the piece is now Blue (AI's), Red (player) plays next
-  turn = P1;
   statusEl.textContent = `Your turn (${colorName(playerColor).toLowerCase()})`;
-  draw();
+  redraw();
 }
 
 function checkWin(player: Cell): boolean {
-  const group = findWinGroup(board, player, boardSize);
+  const group = findWinGroup(state.board, player, state.boardSize);
   if (group) {
-    winCells = new Set(group);
-    gameOver = true;
+    state.winCells = new Set(group);
+    state.gameOver = true;
     swapAvailable = false;
     updateSwapUI();
-    if (player === playerColor) {
-      statusEl.textContent = "You win!";
-    } else {
-      statusEl.textContent = "Computer wins";
-    }
-    draw();
+    statusEl.textContent = player === playerColor ? "You win!" : "Computer wins";
+    redraw();
     return true;
   }
-  if (isFull(board, boardSize)) {
-    gameOver = true;
+  if (isFull(state.board, state.boardSize)) {
+    state.gameOver = true;
     swapAvailable = false;
     updateSwapUI();
     statusEl.textContent = "Draw";
-    draw();
+    redraw();
     return true;
   }
   return false;
 }
 
-const AI_DELAY = 400;
-let aiThinkStart = 0;
-
 function handleAiTurn() {
-  if (gameOver) return;
-  // AI is Blue and it's the pie-rule moment: decide whether to steal
-  if (swapAvailable && turn === aiColor) {
-    // Find the opening move index
-    const total = totalCells(boardSize);
+  if (state.gameOver) return;
+  if (swapAvailable && state.turn === aiColor) {
+    const total = totalCells(state.boardSize);
     let openingIdx = -1;
     for (let i = 0; i < total; i++) {
-      if (board[i] !== EMPTY) {
+      if (state.board[i] !== EMPTY) {
         openingIdx = i;
         break;
       }
     }
     if (openingIdx >= 0 && STEAL_SET.has(openingIdx)) {
       statusEl.textContent = "Computer steals";
-      draw();
+      redraw();
       setTimeout(() => doAiSwap(), AI_DELAY);
       return;
     }
-    // Don't steal — just play normally
     swapAvailable = false;
     updateSwapUI();
   }
   aiThinking = true;
   aiThinkStart = performance.now();
   statusEl.textContent = "Thinking...";
-  draw();
+  redraw();
   worker.postMessage({
-    board,
+    board: state.board,
     turn: aiColor,
-    n: boardSize,
+    n: state.boardSize,
     iterations: parseInt(iterEl.value) || 5000,
     C: 1.41,
   });
@@ -253,21 +114,17 @@ function handleAiTurn() {
 
 function applyAiMove(move: number) {
   if (move < 0) return;
-  board[move] = aiColor;
+  state.board[move] = aiColor;
   moveCount++;
   aiThinking = false;
   if (checkWin(aiColor)) return;
-  turn = playerColor;
-  // After AI (Red) plays the opening move, player (Blue) can steal
+  state.turn = playerColor;
   if (moveCount === 1) {
     swapAvailable = true;
-    statusEl.textContent = `Your turn (${colorName(playerColor).toLowerCase()})`;
     updateSwapUI();
-    draw();
-    return;
   }
   statusEl.textContent = `Your turn (${colorName(playerColor).toLowerCase()})`;
-  draw();
+  redraw();
 }
 
 worker.onmessage = (e: MessageEvent<{ move: number }>) => {
@@ -281,111 +138,41 @@ worker.onmessage = (e: MessageEvent<{ move: number }>) => {
 };
 
 function makeMove(i: number) {
-  if (gameOver || aiThinking || board[i] !== EMPTY || turn !== playerColor) return;
-  // If swap is available for the player, placing a piece declines the swap
   if (swapAvailable) {
     swapAvailable = false;
     updateSwapUI();
   }
-  board[i] = playerColor;
+  state.board[i] = playerColor;
   moveCount++;
   if (checkWin(playerColor)) return;
-  turn = aiColor;
-  draw();
-  // After player (Red) plays the opening move, AI (Blue) can steal
-  if (moveCount === 1) {
-    swapAvailable = true;
-    handleAiTurn();
-    return;
-  }
+  state.turn = aiColor;
+  redraw();
+  if (moveCount === 1) swapAvailable = true;
   handleAiTurn();
 }
 
 function newGame() {
   playerGoesFirst = !playerGoesFirst;
-  boardSize = BOARD_SIZE;
-  board = new Array(totalCells(boardSize)).fill(EMPTY);
+  resetBoard();
   playerColor = playerGoesFirst ? P1 : P2;
   aiColor = playerGoesFirst ? P2 : P1;
-  turn = P1;
   moveCount = 0;
-  gameOver = false;
   aiThinking = false;
-  winCells = null;
-  hoverIdx = -1;
   swapAvailable = false;
   updateSwapUI();
-  if (turn === aiColor) {
+  if (state.turn === aiColor) {
     handleAiTurn();
   } else {
     statusEl.textContent = `Your turn (${colorName(playerColor).toLowerCase()})`;
-    draw();
+    redraw();
   }
 }
 
-function canvasXY(e: MouseEvent | Touch): [number, number] {
-  const rect = canvas.getBoundingClientRect();
-  return [e.clientX - rect.left, e.clientY - rect.top];
-}
-
-canvas.addEventListener("click", (e) => {
-  const [x, y] = canvasXY(e);
-  const i = hitTest(x, y);
-  if (i >= 0) makeMove(i);
-});
-
-canvas.addEventListener("mousemove", (e) => {
-  const [x, y] = canvasXY(e);
-  const i = hitTest(x, y);
-  if (i >= 0 && !gameOver && !aiThinking && turn === playerColor && board[i] === EMPTY) {
-    canvas.style.cursor = "pointer";
-  } else {
-    canvas.style.cursor = "default";
-  }
-  if (i !== hoverIdx) {
-    hoverIdx = i;
-    draw();
-  }
-});
-
-canvas.addEventListener("mouseleave", () => {
-  if (hoverIdx !== -1) {
-    hoverIdx = -1;
-    draw();
-  }
-});
-
-canvas.addEventListener(
-  "touchstart",
-  (e) => {
-    e.preventDefault();
-  },
-  { passive: false },
-);
-
-canvas.addEventListener(
-  "touchend",
-  (e) => {
-    e.preventDefault();
-    const touch = e.changedTouches[0];
-    const [x, y] = canvasXY(touch);
-    const i = hitTest(x, y);
-    if (i >= 0) makeMove(i);
-    hoverIdx = -1;
-    draw();
-  },
-  { passive: false },
-);
+const redraw = setupEvents((i) => !aiThinking && state.turn === playerColor && (i < 0 || state.board[i] === EMPTY), makeMove);
 
 newGameEl.addEventListener("click", newGame);
-window.addEventListener("resize", () => {
-  resize();
-  draw();
-});
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => draw());
-
 resize();
-board = new Array(totalCells(boardSize)).fill(EMPTY);
+resetBoard();
 statusEl.textContent = `Your turn (${colorName(playerColor).toLowerCase()})`;
 updateSwapUI();
-draw();
+redraw();
