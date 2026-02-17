@@ -293,7 +293,8 @@ function handlePlayerTurn(): void {
     statusEl.textContent = "Your turn was skipped";
     currentTurn = aiColor;
     draw();
-    setTimeout(handleAiTurn, GAME_DELAY + 375);
+    const gen = gameGen;
+    setTimeout(() => { if (gen === gameGen) handleAiTurn(); }, GAME_DELAY + 375);
     return;
   }
   statusEl.textContent = `Your turn (${colorName(playerColor)})`;
@@ -307,7 +308,8 @@ function handleAiTurn(): void {
     statusEl.textContent = "Computer's turn was skipped";
     currentTurn = playerColor;
     draw();
-    setTimeout(handlePlayerTurn, GAME_DELAY + 375);
+    const gen = gameGen;
+    setTimeout(() => { if (gen === gameGen) handlePlayerTurn(); }, GAME_DELAY + 375);
     return;
   }
   aiThinking = true;
@@ -318,11 +320,13 @@ function handleAiTurn(): void {
     board,
     aiColor,
     depth: parseInt(depthEl.value) || 4,
+    gen: gameGen,
   });
 }
 
 const GAME_DELAY = 1000;
 let aiThinkStart = 0;
+let gameGen = 0;
 
 function applyAiMove(move: Pos | null): void {
   if (move) {
@@ -344,11 +348,13 @@ function applyAiMove(move: Pos | null): void {
   }
 }
 
-worker.onmessage = (e: MessageEvent<{ move: Pos | null }>) => {
+worker.onmessage = (e: MessageEvent<{ move: Pos | null; gen: number }>) => {
+  const gen = e.data.gen;
+  if (gen !== gameGen) return;
   const elapsed = performance.now() - aiThinkStart;
   const remaining = GAME_DELAY - elapsed;
   if (remaining > 0) {
-    setTimeout(() => applyAiMove(e.data.move), remaining);
+    setTimeout(() => { if (gen === gameGen) applyAiMove(e.data.move); }, remaining);
   } else {
     applyAiMove(e.data.move);
   }
@@ -394,6 +400,7 @@ canvas.addEventListener("mousemove", (e: MouseEvent) => {
 });
 
 newGameEl.addEventListener("click", () => {
+  gameGen++;
   playerGoesFirst = !playerGoesFirst;
   board = createBoard();
   playerColor = playerGoesFirst ? BLACK : WHITE;

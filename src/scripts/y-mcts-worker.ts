@@ -161,13 +161,13 @@ function tryReuseTree(board: Cell[], turn: Cell, n: number): MCTSNode | null {
   return node;
 }
 
-self.onmessage = (e: MessageEvent<{ board: Cell[]; turn: Cell; n: number; iterations: number; C: number; reset?: boolean }>) => {
+self.onmessage = (e: MessageEvent<{ board: Cell[]; turn: Cell; n: number; iterations: number; C: number; gen: number; reset?: boolean }>) => {
   if (e.data.reset) {
     prevRoot = null;
     prevBoard = null;
     return;
   }
-  const { board, turn, n, iterations, C } = e.data;
+  const { board, turn, n, iterations, C, gen } = e.data;
 
   // Try to reuse the existing tree, otherwise create a fresh root
   const root = tryReuseTree(board, turn, n) ?? createNode(-1, null, turn, board, n);
@@ -194,5 +194,5 @@ self.onmessage = (e: MessageEvent<{ board: Cell[]; turn: Cell; n: number; iterat
     prevBoard = null;
   }
 
-  self.postMessage({ move });
+  self.postMessage({ move, gen });
 };

@@ -59,20 +59,20 @@ function minimax(board: Board, depth: number, alpha: number, beta: number, isMax
   }
 }
 
-self.onmessage = (e: MessageEvent<{ board: Uint8Array; aiPlayer: Cell; depth: number }>) => {
+self.onmessage = (e: MessageEvent<{ board: Uint8Array; aiPlayer: Cell; depth: number; gen: number }>) => {
   const board = new Uint8Array(e.data.board) as Board;
-  const { aiPlayer, depth } = e.data;
+  const { aiPlayer, depth, gen } = e.data;
 
   const moves = getValidMoves(board);
   if (moves.length === 0) {
-    self.postMessage({ move: -1 });
+    self.postMessage({ move: -1, gen });
     return;
   }
 
   // Quick check: can AI win immediately?
   for (const move of moves) {
     if (checkWin(makeMove(board, move, aiPlayer)).winner === aiPlayer) {
-      self.postMessage({ move });
+      self.postMessage({ move, gen });
       return;
     }
   }
@@ -91,5 +91,5 @@ self.onmessage = (e: MessageEvent<{ board: Uint8Array; aiPlayer: Cell; depth: nu
     }
   }
 
-  self.postMessage({ move: bestMove });
+  self.postMessage({ move: bestMove, gen });
 };

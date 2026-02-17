@@ -25,6 +25,7 @@ let swapAvailable = false;
 
 const AI_DELAY = 400;
 let aiThinkStart = 0;
+let gameGen = 0;
 
 function colorName(c: Cell): string {
   return c === P1 ? "Red" : "Blue";
@@ -93,7 +94,8 @@ function handleAiTurn() {
     if (openingIdx >= 0 && STEAL_SET.has(openingIdx)) {
       statusEl.textContent = "Computer steals";
       redraw();
-      setTimeout(() => doAiSwap(), AI_DELAY);
+      const gen = gameGen;
+      setTimeout(() => { if (gen === gameGen) doAiSwap(); }, AI_DELAY);
       return;
     }
     swapAvailable = false;
@@ -109,6 +111,7 @@ function handleAiTurn() {
     n: state.boardSize,
     iterations: parseInt(iterEl.value) || 5000,
     C: 1.41,
+    gen: gameGen,
   });
 }
 
@@ -127,11 +130,13 @@ function applyAiMove(move: number) {
   redraw();
 }
 
-worker.onmessage = (e: MessageEvent<{ move: number }>) => {
+worker.onmessage = (e: MessageEvent<{ move: number; gen: number }>) => {
+  const gen = e.data.gen;
+  if (gen !== gameGen) return;
   const elapsed = performance.now() - aiThinkStart;
   const remaining = AI_DELAY - elapsed;
   if (remaining > 0) {
-    setTimeout(() => applyAiMove(e.data.move), remaining);
+    setTimeout(() => { if (gen === gameGen) applyAiMove(e.data.move); }, remaining);
   } else {
     applyAiMove(e.data.move);
   }
@@ -152,6 +157,7 @@ function makeMove(i: number) {
 }
 
 function newGame() {
+  gameGen++;
   playerGoesFirst = !playerGoesFirst;
   worker.postMessage({ reset: true });
   resetBoard();

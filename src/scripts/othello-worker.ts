@@ -96,11 +96,11 @@ function minimax(b: Board, d: number, alpha: number, beta: number, current: Cell
   }
 }
 
-self.onmessage = (e: MessageEvent<{ board: Board; aiColor: Cell; depth: number }>) => {
-  const { board, aiColor, depth } = e.data;
+self.onmessage = (e: MessageEvent<{ board: Board; aiColor: Cell; depth: number; gen: number }>) => {
+  const { board, aiColor, depth, gen } = e.data;
   let moves = getValidMoves(board, aiColor);
   if (moves.length === 0) {
-    self.postMessage({ move: null });
+    self.postMessage({ move: null, gen });
     return;
   }
 
@@ -118,5 +118,5 @@ self.onmessage = (e: MessageEvent<{ board: Board; aiColor: Cell; depth: number }
     }
   }
 
-  self.postMessage({ move: bestMove });
+  self.postMessage({ move: bestMove, gen });
 };

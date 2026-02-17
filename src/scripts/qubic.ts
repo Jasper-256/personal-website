@@ -287,6 +287,7 @@ function applyPlayerMove(pos: number): void {
 
 const GAME_DELAY = 800;
 let aiThinkStart = 0;
+let gameGen = 0;
 
 function handleAiTurn(): void {
   aiThinking = true;
@@ -296,6 +297,7 @@ function handleAiTurn(): void {
     board: board,
     aiPlayer: aiPiece,
     depth: parseInt(depthEl.value) || 3,
+    gen: gameGen,
   });
 }
 
@@ -327,11 +329,13 @@ function applyAiMove(pos: number): void {
   statusEl.textContent = `Your turn (${playerPiece === PLAYER_X ? "blue" : "red"})`;
 }
 
-worker.onmessage = (e: MessageEvent<{ move: number }>) => {
+worker.onmessage = (e: MessageEvent<{ move: number; gen: number }>) => {
+  const gen = e.data.gen;
+  if (gen !== gameGen) return;
   const elapsed = performance.now() - aiThinkStart;
   const remaining = GAME_DELAY - elapsed;
   if (remaining > 0) {
-    setTimeout(() => applyAiMove(e.data.move), remaining);
+    setTimeout(() => { if (gen === gameGen) applyAiMove(e.data.move); }, remaining);
   } else {
     applyAiMove(e.data.move);
   }
@@ -383,6 +387,7 @@ function hideGameOver(): void {
 // ---- New game ----
 
 newGameEl.addEventListener("click", () => {
+  gameGen++;
   playerGoesFirst = !playerGoesFirst;
   board = createBoard();
   playerPiece = playerGoesFirst ? PLAYER_X : PLAYER_O;
