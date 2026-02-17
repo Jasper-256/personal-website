@@ -1,0 +1,26 @@
+---
+import Layout from "@/layouts/Layout.astro";
+---
+
+<Layout title="Y - Jasper Morgal">
+  <h1>Y</h1>
+  <canvas id="board"></canvas>
+  <p id="status">Red's turn</p>
+  <p id="swap-container"></p>
+  <p class="pointer" id="newgame">New game</p>
+  <script>
+    import "@/scripts/y";
+  </script>
+</Layout>
+
+<style>
+  p {
+    font-family: "Menlo", monospace;
+  }
+  canvas {
+    display: block;
+    width: min(100%, 62vh);
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+  }
+</style>
