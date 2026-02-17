@@ -20,6 +20,7 @@ export const state = {
   gameOver: false,
   winCells: null as Set<number> | null,
   hoverIdx: -1,
+  lastMove: -1,
 };
 
 export function resetBoard() {
@@ -29,6 +30,7 @@ export function resetBoard() {
   state.gameOver = false;
   state.winCells = null;
   state.hoverIdx = -1;
+  state.lastMove = -1;
 }
 
 export function resize() {
@@ -84,6 +86,26 @@ export function hitTest(px: number, py: number): number {
   return best;
 }
 
+function parseHex(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+}
+
+function toHex(r: number, g: number, b: number): string {
+  return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+
+function darken(hex: string, amount: number): string {
+  const [r, g, b] = parseHex(hex);
+  const f = 1 - amount;
+  return toHex(Math.round(r * f), Math.round(g * f), Math.round(b * f));
+}
+
+function lighten(hex: string, amount: number): string {
+  const [r, g, b] = parseHex(hex);
+  return toHex(Math.round(r + (255 - r) * amount), Math.round(g + (255 - g) * amount), Math.round(b + (255 - b) * amount));
+}
+
 /**
  * Draw the board. `canHover` controls whether hover highlights show.
  * Hover color is based on `state.turn`.
@@ -99,31 +121,54 @@ export function draw(canHover: boolean) {
   ctx.clearRect(0, 0, w, h);
 
   const total = totalCells(state.boardSize);
-  const cellS = s * 0.92;
   const p1Fill = "#d94a4a";
   const p2Fill = "#4a90d9";
   const emptyFill = dark ? "#2a2a2a" : "#dcdcdc";
   const borderColor = dark ? "#555" : "#aaa";
   const p1Hover = dark ? "rgba(217,74,74,0.4)" : "rgba(217,74,74,0.3)";
   const p2Hover = dark ? "rgba(74,144,217,0.4)" : "rgba(74,144,217,0.3)";
+  const gridLineWidth = 1;
+  const lastMoveBorder = 4;
+  const insetS = s - gridLineWidth - lastMoveBorder / 2;
 
+  // Draw all cells at full size (no gaps)
   for (let i = 0; i < total; i++) {
     const [r, c] = fromIdx(i);
     const [cx, cy] = hexCenter(r, c);
 
     let fill: string;
-    const isWin = state.winCells?.has(i);
-    if (state.board[i] === P1) fill = isWin ? "#ff6a6a" : p1Fill;
-    else if (state.board[i] === P2) fill = isWin ? "#6ab0ff" : p2Fill;
+    if (state.board[i] === P1) fill = p1Fill;
+    else if (state.board[i] === P2) fill = p2Fill;
     else if (i === state.hoverIdx && canHover) fill = state.turn === P1 ? p1Hover : p2Hover;
     else fill = emptyFill;
 
-    hexPath(cx, cy, cellS);
+    hexPath(cx, cy, s);
     ctx.fillStyle = fill;
     ctx.fill();
-    ctx.strokeStyle = isWin ? (state.board[i] === P1 ? "#ffa0a0" : "#a0d0ff") : borderColor;
-    ctx.lineWidth = isWin ? 2.5 : 1.5;
+  }
+
+  // Draw grid lines on all cells
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < total; i++) {
+    const [r, c] = fromIdx(i);
+    const [cx, cy] = hexCenter(r, c);
+    hexPath(cx, cy, s);
     ctx.stroke();
+  }
+
+  // Draw inset border on last placed piece and winning cells
+  ctx.lineWidth = lastMoveBorder;
+  const highlighted = state.winCells ?? (state.lastMove >= 0 && state.board[state.lastMove] !== EMPTY ? new Set([state.lastMove]) : null);
+  if (highlighted) {
+    for (const i of highlighted) {
+      const [r, c] = fromIdx(i);
+      const [cx, cy] = hexCenter(r, c);
+      const color = state.board[i] === P1 ? p1Fill : p2Fill;
+      ctx.strokeStyle = darken(color, dark ? 0.3 : 0.2);
+      hexPath(cx, cy, insetS);
+      ctx.stroke();
+    }
   }
 
   ctx.restore();

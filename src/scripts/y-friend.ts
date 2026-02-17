@@ -24,6 +24,7 @@ function handleSwap() {
 
 function makeMove(i: number) {
   state.board[i] = state.turn;
+  state.lastMove = i;
   moveCount++;
 
   const group = findWinGroup(state.board, state.turn, state.boardSize);

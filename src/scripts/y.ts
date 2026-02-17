@@ -120,6 +120,7 @@ function handleAiTurn() {
 function applyAiMove(move: number) {
   if (move < 0) return;
   state.board[move] = aiColor;
+  state.lastMove = move;
   moveCount++;
   aiThinking = false;
   if (checkWin(aiColor)) return;
@@ -152,6 +153,7 @@ function makeMove(i: number) {
     updateSwapUI();
   }
   state.board[i] = playerColor;
+  state.lastMove = i;
   moveCount++;
   if (checkWin(playerColor)) return;
   state.turn = aiColor;
