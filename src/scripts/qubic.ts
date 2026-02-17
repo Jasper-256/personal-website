@@ -335,7 +335,9 @@ worker.onmessage = (e: MessageEvent<{ move: number; gen: number }>) => {
   const elapsed = performance.now() - aiThinkStart;
   const remaining = GAME_DELAY - elapsed;
   if (remaining > 0) {
-    setTimeout(() => { if (gen === gameGen) applyAiMove(e.data.move); }, remaining);
+    setTimeout(() => {
+      if (gen === gameGen) applyAiMove(e.data.move);
+    }, remaining);
   } else {
     applyAiMove(e.data.move);
   }

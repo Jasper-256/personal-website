@@ -23,7 +23,7 @@ let aiThinking = false;
 let playerGoesFirst = true;
 let swapAvailable = false;
 
-const AI_DELAY = 400;
+const AI_DELAY = 800;
 let aiThinkStart = 0;
 let gameGen = 0;
 
@@ -95,7 +95,9 @@ function handleAiTurn() {
       statusEl.textContent = "Computer steals";
       redraw();
       const gen = gameGen;
-      setTimeout(() => { if (gen === gameGen) doAiSwap(); }, AI_DELAY);
+      setTimeout(() => {
+        if (gen === gameGen) doAiSwap();
+      }, AI_DELAY);
       return;
     }
     swapAvailable = false;
@@ -136,7 +138,9 @@ worker.onmessage = (e: MessageEvent<{ move: number; gen: number }>) => {
   const elapsed = performance.now() - aiThinkStart;
   const remaining = AI_DELAY - elapsed;
   if (remaining > 0) {
-    setTimeout(() => { if (gen === gameGen) applyAiMove(e.data.move); }, remaining);
+    setTimeout(() => {
+      if (gen === gameGen) applyAiMove(e.data.move);
+    }, remaining);
   } else {
     applyAiMove(e.data.move);
   }

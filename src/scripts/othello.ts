@@ -294,7 +294,9 @@ function handlePlayerTurn(): void {
     currentTurn = aiColor;
     draw();
     const gen = gameGen;
-    setTimeout(() => { if (gen === gameGen) handleAiTurn(); }, GAME_DELAY + 375);
+    setTimeout(() => {
+      if (gen === gameGen) handleAiTurn();
+    }, GAME_DELAY + 375);
     return;
   }
   statusEl.textContent = `Your turn (${colorName(playerColor)})`;
@@ -309,7 +311,9 @@ function handleAiTurn(): void {
     currentTurn = playerColor;
     draw();
     const gen = gameGen;
-    setTimeout(() => { if (gen === gameGen) handlePlayerTurn(); }, GAME_DELAY + 375);
+    setTimeout(() => {
+      if (gen === gameGen) handlePlayerTurn();
+    }, GAME_DELAY + 375);
     return;
   }
   aiThinking = true;
@@ -354,7 +358,9 @@ worker.onmessage = (e: MessageEvent<{ move: Pos | null; gen: number }>) => {
   const elapsed = performance.now() - aiThinkStart;
   const remaining = GAME_DELAY - elapsed;
   if (remaining > 0) {
-    setTimeout(() => { if (gen === gameGen) applyAiMove(e.data.move); }, remaining);
+    setTimeout(() => {
+      if (gen === gameGen) applyAiMove(e.data.move);
+    }, remaining);
   } else {
     applyAiMove(e.data.move);
   }

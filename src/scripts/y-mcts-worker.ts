@@ -148,7 +148,7 @@ function tryReuseTree(board: Cell[], turn: Cell, n: number): MCTSNode | null {
   // Walk down the tree through each new move
   let node: MCTSNode | null = prevRoot;
   for (const move of newMoves) {
-    const child = node!.children.find((c) => c.move === move);
+    const child: MCTSNode | undefined = node!.children.find((c) => c.move === move);
     if (!child) return null;
     node = child;
   }
