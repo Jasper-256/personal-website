@@ -8,7 +8,7 @@ import Layout from "@/layouts/Layout.astro";
       <h1>UTF-8 Encoder</h1>
       <div id="bits">
         {
-          Array.from({ length: 256 }, (_, byte) => (
+          Array.from({ length: 1024 }, (_, byte) => (
             <div class="byte">
               {Array.from({ length: 8 }, (_, bit) => (
                 <label>
@@ -28,7 +28,7 @@ import Layout from "@/layouts/Layout.astro";
     </section>
   </div>
   <script>
-    import "@/scripts/utf-8";
+    import "@/scripts/utf8";
   </script>
 </Layout>
 
