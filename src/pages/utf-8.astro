@@ -76,11 +76,11 @@ import Layout from "@/layouts/Layout.astro";
 
   #bits {
     font-family: "Menlo", monospace;
-    margin: 4px 8px 8px;
+    margin: 5px 16px 16px;
   }
 
   #decoded {
-    margin: 6px 16px;
+    margin: 16px;
     text-align: left;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -104,5 +104,12 @@ import Layout from "@/layouts/Layout.astro";
   hr {
     height: auto;
     margin: 0;
+  }
+
+  @media (max-width: 550px) {
+    #utf8-tool {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr 2px 1fr;
+    }
   }
 </style>
