@@ -6,7 +6,7 @@ import Layout from "@/layouts/Layout.astro";
   <h1>UTF-8 Encoder</h1>
   <div id="bits" aria-label="UTF-8 byte checkboxes">
     {
-      Array.from({ length: 4 }, (_, byte) => (
+      Array.from({ length: 16 }, (_, byte) => (
         <div class="byte">
           {Array.from({ length: 8 }, (_, bit) => (
             <label>
@@ -27,7 +27,7 @@ import Layout from "@/layouts/Layout.astro";
 <style>
   #bits {
     display: grid;
-    gap: 4px;
+    gap: 6px;
     width: fit-content;
     margin: 0 auto;
     font-family: "Menlo", monospace;
@@ -35,8 +35,8 @@ import Layout from "@/layouts/Layout.astro";
 
   .byte {
     display: grid;
-    grid-template-columns: repeat(8, 18px) 2.5ch;
-    gap: 4px;
+    grid-template-columns: repeat(8, 18px) 3ch;
+    gap: 6px;
     align-items: center;
   }
 
