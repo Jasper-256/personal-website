@@ -39,7 +39,6 @@ import Layout from "@/layouts/Layout.astro";
   }
 
   :global(html) {
-    height: 100%;
     overflow: hidden;
   }
 
@@ -47,16 +46,13 @@ import Layout from "@/layouts/Layout.astro";
     display: flex;
     flex-direction: column;
     height: calc(100vh - 8px);
-    margin-left: 0px;
-    margin-right: 0px;
-    margin-bottom: 0px;
+    margin: 8px 0 0;
     overflow: hidden;
   }
 
   #utf8-tool {
     display: grid;
     grid-template-columns: 1fr 2px 1fr;
-    width: 100%;
     flex: 1;
     min-height: 0;
   }
@@ -71,23 +67,26 @@ import Layout from "@/layouts/Layout.astro";
     justify-items: center;
   }
 
-  #bits {
+  #bits,
+  .byte {
     display: grid;
     gap: 4px;
+  }
+
+  #bits {
     font-family: "Menlo", monospace;
     margin: 8px;
   }
 
   #decoded {
     margin: 6px 8px;
+    text-align: left;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
 
   .byte {
-    display: grid;
     grid-template-columns: repeat(8, 18px) 3ch;
-    gap: 4px;
     height: 18px;
   }
 
@@ -105,9 +104,5 @@ import Layout from "@/layouts/Layout.astro";
     width: 2px;
     height: auto;
     margin: 0;
-  }
-
-  #decoded-section {
-    text-align: left;
   }
 </style>
