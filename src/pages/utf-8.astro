@@ -3,9 +3,9 @@ import Layout from "@/layouts/Layout.astro";
 ---
 
 <Layout title="UTF-8 Encoder - Jasper Morgal">
-  <h1>UTF-8 Encoder</h1>
   <div id="utf8-tool">
     <section>
+      <h1>UTF-8 Encoder</h1>
       <div id="bits">
         {
           Array.from({ length: 256 }, (_, byte) => (
@@ -23,6 +23,7 @@ import Layout from "@/layouts/Layout.astro";
     </section>
     <hr />
     <section id="decoded-section">
+      <h1>Decoded Text</h1>
       <p id="decoded"></p>
     </section>
   </div>
@@ -75,18 +76,18 @@ import Layout from "@/layouts/Layout.astro";
 
   #bits {
     font-family: "Menlo", monospace;
-    margin: 8px;
+    margin: 4px 8px 8px;
   }
 
   #decoded {
-    margin: 6px 8px;
+    margin: 6px 16px;
     text-align: left;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
 
   .byte {
-    grid-template-columns: repeat(8, 18px) 3ch;
+    grid-template-columns: repeat(8, 18px) 2.5ch;
     height: 18px;
   }
 
@@ -101,7 +102,6 @@ import Layout from "@/layouts/Layout.astro";
   }
 
   hr {
-    width: 2px;
     height: auto;
     margin: 0;
   }
