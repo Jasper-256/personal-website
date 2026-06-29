@@ -4,45 +4,90 @@ import Layout from "@/layouts/Layout.astro";
 
 <Layout title="UTF-8 Encoder - Jasper Morgal">
   <h1>UTF-8 Encoder</h1>
-  <div id="bits" aria-label="UTF-8 byte checkboxes">
-    {
-      Array.from({ length: 16 }, (_, byte) => (
-        <div class="byte">
-          {Array.from({ length: 8 }, (_, bit) => (
-            <label>
-              <input type="checkbox" data-bit={byte * 8 + bit} />
-            </label>
-          ))}
-          <output class="hex">00</output>
-        </div>
-      ))
-    }
+  <div id="utf8-tool">
+    <section>
+      <div id="bits">
+        {
+          Array.from({ length: 256 }, (_, byte) => (
+            <div class="byte">
+              {Array.from({ length: 8 }, (_, bit) => (
+                <label>
+                  <input type="checkbox" data-bit={byte * 8 + bit} />
+                </label>
+              ))}
+              <output class="hex">00</output>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+    <hr />
+    <section id="decoded-section">
+      <p id="decoded"></p>
+    </section>
   </div>
-  <p><output id="decoded" aria-live="polite"></output></p>
   <script>
     import "@/scripts/utf-8";
   </script>
 </Layout>
 
 <style>
+  @media (min-width: 551px) {
+    :global(.nav-home) {
+      margin-left: 8px;
+    }
+  }
+
+  :global(html) {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  :global(body) {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 8px);
+    margin-left: 0px;
+    margin-right: 0px;
+    margin-bottom: 0px;
+    overflow: hidden;
+  }
+
+  #utf8-tool {
+    display: grid;
+    grid-template-columns: 1fr 2px 1fr;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+
+  section {
+    overflow: auto;
+    min-width: 0;
+  }
+
+  section:first-child {
+    display: grid;
+    justify-items: center;
+  }
+
   #bits {
     display: grid;
-    gap: 6px;
-    width: fit-content;
-    margin: 0 auto;
+    gap: 4px;
     font-family: "Menlo", monospace;
+    margin: 8px;
+  }
+
+  #decoded {
+    margin: 6px 8px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .byte {
     display: grid;
     grid-template-columns: repeat(8, 18px) 3ch;
-    gap: 6px;
-    align-items: center;
-  }
-
-  label {
-    display: block;
-    width: 18px;
+    gap: 4px;
     height: 18px;
   }
 
@@ -56,12 +101,13 @@ import Layout from "@/layouts/Layout.astro";
     text-align: right;
   }
 
-  #decoded {
-    display: inline-block;
-    min-width: 4ch;
-    min-height: 1.2em;
-    padding: 4px 6px;
-    font-family: "Menlo", monospace;
-    white-space: pre-wrap;
+  hr {
+    width: 2px;
+    height: auto;
+    margin: 0;
+  }
+
+  #decoded-section {
+    text-align: left;
   }
 </style>

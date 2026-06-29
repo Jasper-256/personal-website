@@ -4,7 +4,7 @@ const decoded = document.getElementById("decoded")!;
 const decoder = new TextDecoder("utf-8");
 
 function update(): void {
-  const bytes = new Uint8Array(16);
+  const bytes = new Uint8Array(256);
 
   boxes.forEach((box, i) => {
     const bit = box.checked ? 1 : 0;
