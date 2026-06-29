@@ -1,0 +1,67 @@
+---
+import Layout from "@/layouts/Layout.astro";
+---
+
+<Layout title="UTF-8 Encoder - Jasper Morgal">
+  <h1>UTF-8 Encoder</h1>
+  <div id="bits" aria-label="UTF-8 byte checkboxes">
+    {
+      Array.from({ length: 4 }, (_, byte) => (
+        <div class="byte">
+          {Array.from({ length: 8 }, (_, bit) => (
+            <label>
+              <input type="checkbox" data-bit={byte * 8 + bit} />
+            </label>
+          ))}
+          <output class="hex">00</output>
+        </div>
+      ))
+    }
+  </div>
+  <p><output id="decoded" aria-live="polite"></output></p>
+  <script>
+    import "@/scripts/utf-8";
+  </script>
+</Layout>
+
+<style>
+  #bits {
+    display: grid;
+    gap: 4px;
+    width: fit-content;
+    margin: 0 auto;
+    font-family: "Menlo", monospace;
+  }
+
+  .byte {
+    display: grid;
+    grid-template-columns: repeat(8, 18px) 2.5ch;
+    gap: 4px;
+    align-items: center;
+  }
+
+  label {
+    display: block;
+    width: 18px;
+    height: 18px;
+  }
+
+  input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+  }
+
+  .hex {
+    text-align: right;
+  }
+
+  #decoded {
+    display: inline-block;
+    min-width: 4ch;
+    min-height: 1.2em;
+    padding: 4px 6px;
+    font-family: "Menlo", monospace;
+    white-space: pre-wrap;
+  }
+</style>
