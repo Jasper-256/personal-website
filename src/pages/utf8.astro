@@ -6,20 +6,7 @@ import Layout from "@/layouts/Layout.astro";
   <div id="utf8-tool">
     <section>
       <h1>UTF-8 Encoder</h1>
-      <div id="bits">
-        {
-          Array.from({ length: 1024 }, (_, byte) => (
-            <div class="byte">
-              {Array.from({ length: 8 }, (_, bit) => (
-                <label>
-                  <input type="checkbox" data-bit={byte * 8 + bit} />
-                </label>
-              ))}
-              <output class="hex">00</output>
-            </div>
-          ))
-        }
-      </div>
+      <div id="bits"></div>
     </section>
     <hr />
     <section id="decoded-section">
@@ -68,8 +55,7 @@ import Layout from "@/layouts/Layout.astro";
     justify-items: center;
   }
 
-  #bits,
-  .byte {
+  #bits :global(.byte) {
     display: grid;
     gap: 4px;
   }
@@ -77,6 +63,8 @@ import Layout from "@/layouts/Layout.astro";
   #bits {
     font-family: "Menlo", monospace;
     margin: 5px 16px 16px;
+    position: relative;
+    width: calc(176px + 2.5ch);
   }
 
   #decoded {
@@ -86,18 +74,21 @@ import Layout from "@/layouts/Layout.astro";
     overflow-wrap: anywhere;
   }
 
-  .byte {
+  #bits :global(.byte) {
     grid-template-columns: repeat(8, 18px) 2.5ch;
     height: 18px;
+    position: absolute;
+    top: 0;
+    left: 0;
   }
 
-  input {
+  #bits :global(input) {
     width: 18px;
     height: 18px;
     margin: 0;
   }
 
-  .hex {
+  #bits :global(.hex) {
     text-align: right;
   }
 
