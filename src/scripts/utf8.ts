@@ -115,7 +115,7 @@ function flushPendingChanges(): void {
   if (changes.length) sendChanges(changes);
 }
 
-function applyFull(nextBytes: number[]): void {
+function applyFull(nextBytes: ArrayLike<number>): void {
   const now = Date.now();
 
   bytes.forEach((_, byteIndex) => {
@@ -157,9 +157,15 @@ function readMessage(data: string): SyncMessage | undefined {
 function connect(): void {
   window.clearTimeout(retryTimer);
   socket = new WebSocket(socketUrl());
+  socket.binaryType = "arraybuffer";
 
   socket.addEventListener("open", flushPendingChanges);
   socket.addEventListener("message", ({ data }) => {
+    if (data instanceof ArrayBuffer) {
+      if (data.byteLength === BYTE_COUNT) applyFull(new Uint8Array(data));
+      return;
+    }
+
     const message = readMessage(data);
     if (!message) return;
 

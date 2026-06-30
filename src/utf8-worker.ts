@@ -123,11 +123,11 @@ export class Utf8State extends DurableObject<Env> {
   }
 
   private sendFullState(socket: WebSocket): void {
-    socket.send(JSON.stringify({ type: "full", bytes: [...this.bytes] }));
+    socket.send(this.bytes.slice().buffer);
   }
 
   private broadcastFullState(): void {
-    this.broadcast({ type: "full", bytes: [...this.bytes] });
+    this.ctx.getWebSockets().forEach((socket) => this.sendFullState(socket));
   }
 
   private broadcast(message: unknown): void {
