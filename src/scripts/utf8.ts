@@ -7,14 +7,16 @@ const ROW_HEIGHT = 18;
 const ROW_GAP = 4;
 const ROW_PITCH = ROW_HEIGHT + ROW_GAP;
 const BUFFER_ROWS = 12;
+const FULL_SYNC_LOCAL_GRACE_MS = 500;
 const bytes = new Uint8Array(BYTE_COUNT);
-const pendingChanges = new Map<number, number>();
+const lastLocalChangeAt = new Float64Array(BYTE_COUNT);
+const pendingChanges = new Map<number, Change>();
 let socket: WebSocket | null = null;
 let retryTimer: number | undefined;
 let visibleStart = -1;
 let visibleEnd = -1;
 
-type Change = [number, number];
+type Change = [number, number, number];
 type SyncMessage = { type: "full"; bytes: number[] } | { type: "patch"; changes: Change[] };
 
 bits.style.height = `${BYTE_COUNT * ROW_PITCH - ROW_GAP}px`;
@@ -104,28 +106,35 @@ function sendChanges(changes: Change[]): void {
     return;
   }
 
-  changes.forEach(([byteIndex, value]) => pendingChanges.set(byteIndex, value));
+  changes.forEach((change) => pendingChanges.set(change[0], change));
 }
 
 function flushPendingChanges(): void {
-  const changes = [...pendingChanges];
+  const changes = [...pendingChanges.values()];
   pendingChanges.clear();
   if (changes.length) sendChanges(changes);
 }
 
 function applyFull(nextBytes: number[]): void {
+  const now = Date.now();
+
   bytes.forEach((_, byteIndex) => {
+    if (now - lastLocalChangeAt[byteIndex] < FULL_SYNC_LOCAL_GRACE_MS) return;
     bytes[byteIndex] = nextBytes[byteIndex] & 255;
   });
+
   visibleStart = -1;
   renderVisibleRows();
   renderText();
 }
 
 function applyPatch(changes: Change[]): void {
-  changes.forEach(([byteIndex, value]) => {
-    if (byteIndex >= 0 && byteIndex < bytes.length) setByte(byteIndex, value & 255);
+  changes.forEach(([byteIndex, value, originatedAt]) => {
+    if (byteIndex < 0 || byteIndex >= bytes.length) return;
+    if (originatedAt < lastLocalChangeAt[byteIndex]) return;
+    setByte(byteIndex, value & 255);
   });
+
   renderText();
 }
 
@@ -168,9 +177,11 @@ bits.addEventListener("change", (event) => {
 
   const byteIndex = Math.floor(Number(box.dataset.bit) / 8);
   const value = readByte(byteIndex);
+  const originatedAt = Date.now();
+  lastLocalChangeAt[byteIndex] = originatedAt;
   setByte(byteIndex, value);
   renderText();
-  sendChanges([[byteIndex, value]]);
+  sendChanges([[byteIndex, value, originatedAt]]);
 });
 
 scrollParent.addEventListener("scroll", renderVisibleRows);
