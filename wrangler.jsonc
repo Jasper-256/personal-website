@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "jas-site-astro",
   "account_id": "74fb34d70bac00863c803ec7da668548",
-  "main": "src/utf8-worker.ts",
+  "main": "src/worker.ts",
   "compatibility_date": "2025-11-18",
   "assets": {
     "directory": "./dist",
@@ -15,6 +15,10 @@
       {
         "name": "UTF8_STATE",
         "class_name": "Utf8State"
+      },
+      {
+        "name": "CHAT_ROOM",
+        "class_name": "ChatRoom"
       }
     ]
   },
@@ -22,6 +26,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["Utf8State"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["ChatRoom"]
     }
   ]
 }

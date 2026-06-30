@@ -1,6 +1,6 @@
 {
   "extends": "astro/tsconfigs/strict",
-  "include": ["src/utf8-worker.ts"],
+  "include": ["src/worker.ts", "src/workers/**/*.ts"],
   "compilerOptions": {
     "types": ["@cloudflare/workers-types"]
   }
