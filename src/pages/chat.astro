@@ -4,12 +4,12 @@ import Layout from "@/layouts/Layout.astro";
 
 <Layout title="Public Chat - Jasper Morgal">
   <h1>Public Chat</h1>
-  <p id="history">Loading...</p>
+  <p id="history"></p>
   <form id="frm" hidden>
-    <input type="text" name="Message" placeholder="Message" maxlength="50" size="40" required />
+    <input type="text" name="Message" placeholder="Message" maxlength="50" size="40" autocomplete="off" required />
     <button type="submit" id="submit-form" class="pointer">Send</button>
   </form>
-  <p id="status"></p>
-  <script is:inline src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-  <script is:inline src="/chat.js"></script>
+  <script>
+    import "@/scripts/chat";
+  </script>
 </Layout>

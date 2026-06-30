@@ -14,18 +14,18 @@ const FULL_STATE_INTERVAL_MS = 10_000;
 type Change = [number, number, number];
 type ClientMessage = { type: "patch"; changes: Change[] };
 
-interface Env {
+export interface Utf8Env {
   ASSETS: Fetcher;
   UTF8_STATE: DurableObjectNamespace<Utf8State>;
 }
 
-export class Utf8State extends DurableObject<Env> {
+export class Utf8State extends DurableObject<Utf8Env> {
   private bytes = new Uint8Array(BYTE_COUNT);
   private pendingChanges = new Map<number, Change>();
   private patchTimer: ReturnType<typeof setTimeout> | undefined;
   private dirty = false;
 
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: Utf8Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
       const stored = await ctx.storage.get<number[]>(STATE_KEY);
@@ -149,7 +149,21 @@ export class Utf8State extends DurableObject<Env> {
   }
 }
 
-function utf8State(env: Env): DurableObjectStub<Utf8State> {
+export async function handleUtf8Request(request: Request, env: Utf8Env): Promise<Response | undefined> {
+  const url = new URL(request.url);
+
+  if (url.pathname === UTF8_SOCKET_PATH) {
+    return utf8State(env).fetch(request);
+  }
+
+  if (request.method === "GET" && UTF8_PATHS.has(url.pathname)) {
+    return fetchUtf8Page(request, env);
+  }
+
+  return undefined;
+}
+
+function utf8State(env: Utf8Env): DurableObjectStub<Utf8State> {
   const id = env.UTF8_STATE.idFromName(GLOBAL_OBJECT_NAME);
   return env.UTF8_STATE.get(id);
 }
@@ -162,7 +176,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(text);
 }
 
-async function fetchUtf8Page(request: Request, env: Env): Promise<Response> {
+async function fetchUtf8Page(request: Request, env: Utf8Env): Promise<Response> {
   const [page, state] = await Promise.all([
     env.ASSETS.fetch(request),
     utf8State(env).fetch(new Request(new URL(UTF8_STATE_PATH, request.url))),
@@ -188,19 +202,3 @@ async function fetchUtf8Page(request: Request, env: Env): Promise<Response> {
     headers,
   });
 }
-
-export default {
-  fetch(request, env) {
-    const url = new URL(request.url);
-
-    if (url.pathname === UTF8_SOCKET_PATH) {
-      return utf8State(env).fetch(request);
-    }
-
-    if (request.method === "GET" && UTF8_PATHS.has(url.pathname)) {
-      return fetchUtf8Page(request, env);
-    }
-
-    return env.ASSETS.fetch(request);
-  },
-} satisfies ExportedHandler<Env>;
