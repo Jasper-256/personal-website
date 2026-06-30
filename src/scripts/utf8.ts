@@ -18,6 +18,7 @@ let visibleEnd = -1;
 
 type Change = [number, number, number];
 type SyncMessage = { type: "full"; bytes: number[] } | { type: "patch"; changes: Change[] };
+type WindowWithInitialState = Window & { __UTF8_INITIAL_STATE__?: string };
 
 bits.style.height = `${BYTE_COUNT * ROW_PITCH - ROW_GAP}px`;
 
@@ -138,6 +139,19 @@ function applyPatch(changes: Change[]): void {
   renderText();
 }
 
+function readInitialState(): Uint8Array | undefined {
+  const encoded = (window as WindowWithInitialState).__UTF8_INITIAL_STATE__;
+  if (!encoded) return undefined;
+
+  try {
+    const text = atob(encoded);
+    if (text.length !== BYTE_COUNT) return undefined;
+    return Uint8Array.from(text, (character) => character.charCodeAt(0));
+  } catch {
+    return undefined;
+  }
+}
+
 function socketUrl(): string {
   const url = new URL("/api/utf8", location.href);
   url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -192,6 +206,13 @@ bits.addEventListener("change", (event) => {
 
 scrollParent.addEventListener("scroll", renderVisibleRows);
 window.addEventListener("resize", renderVisibleRows);
-renderVisibleRows();
-renderText();
+
+const initialState = readInitialState();
+if (initialState) {
+  applyFull(initialState);
+} else {
+  renderVisibleRows();
+  renderText();
+}
+
 connect();
