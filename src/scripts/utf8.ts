@@ -43,7 +43,70 @@ function createRow(byteIndex: number): HTMLDivElement {
   const hex = document.createElement("output");
   hex.className = "hex";
   row.append(hex);
+
+  const character = document.createElement("output");
+  character.className = "character";
+  row.append(character);
+
   return row;
+}
+
+function isContinuation(byte: number): boolean {
+  return byte >= 0x80 && byte <= 0xbf;
+}
+
+function continuationValue(byteIndex: number): number | undefined {
+  const byte = bytes[byteIndex];
+  if (!isContinuation(byte)) return undefined;
+  return byte & 0x3f;
+}
+
+function decodeAt(byteIndex: number): [string, number] | undefined {
+  const first = bytes[byteIndex];
+  if (first <= 0x7f) return [String.fromCodePoint(first), 1];
+
+  const second = continuationValue(byteIndex + 1);
+  if (first >= 0xc2 && first <= 0xdf && second !== undefined) {
+    return [String.fromCodePoint(((first & 0x1f) << 6) | second), 2];
+  }
+
+  const third = continuationValue(byteIndex + 2);
+  if (second !== undefined && third !== undefined) {
+    if (first === 0xe0 && bytes[byteIndex + 1] >= 0xa0) {
+      return [String.fromCodePoint(((first & 0x0f) << 12) | (second << 6) | third), 3];
+    }
+
+    if ((first >= 0xe1 && first <= 0xec) || (first >= 0xee && first <= 0xef)) {
+      return [String.fromCodePoint(((first & 0x0f) << 12) | (second << 6) | third), 3];
+    }
+
+    if (first === 0xed && bytes[byteIndex + 1] <= 0x9f) {
+      return [String.fromCodePoint(((first & 0x0f) << 12) | (second << 6) | third), 3];
+    }
+  }
+
+  const fourth = continuationValue(byteIndex + 3);
+  if (second !== undefined && third !== undefined && fourth !== undefined) {
+    const codePoint = ((first & 0x07) << 18) | (second << 12) | (third << 6) | fourth;
+
+    if (
+      ((first === 0xf0 && bytes[byteIndex + 1] >= 0x90) ||
+        (first >= 0xf1 && first <= 0xf3) ||
+        (first === 0xf4 && bytes[byteIndex + 1] <= 0x8f)) &&
+      codePoint <= 0x10ffff
+    ) {
+      return [String.fromCodePoint(codePoint), 4];
+    }
+  }
+}
+
+function characterAt(byteIndex: number): string {
+  for (let start = Math.max(0, byteIndex - 3); start < byteIndex; start++) {
+    const decoded = decodeAt(start);
+    if (decoded && start + decoded[1] > byteIndex) return "";
+  }
+
+  return decodeAt(byteIndex)?.[0] ?? "�";
 }
 
 function renderRow(row: HTMLDivElement, byteIndex: number): void {
@@ -56,7 +119,8 @@ function renderRow(row: HTMLDivElement, byteIndex: number): void {
     box.checked = Boolean(value & (1 << (7 - bit)));
   });
 
-  row.querySelector("output")!.textContent = value.toString(16).padStart(2, "0").toUpperCase();
+  row.querySelector(".hex")!.textContent = value.toString(16).padStart(2, "0").toUpperCase();
+  row.querySelector(".character")!.textContent = characterAt(byteIndex);
 }
 
 function renderVisibleRows(): void {
@@ -83,9 +147,18 @@ function renderByte(byteIndex: number): void {
   if (row) renderRow(row, byteIndex);
 }
 
+function renderAround(byteIndex: number): void {
+  const start = Math.max(0, byteIndex - 3);
+  const end = Math.min(bytes.length, byteIndex + 4);
+
+  for (let index = start; index < end; index++) {
+    renderByte(index);
+  }
+}
+
 function setByte(byteIndex: number, value: number): void {
   bytes[byteIndex] = value;
-  renderByte(byteIndex);
+  renderAround(byteIndex);
 }
 
 function readByte(byteIndex: number): number {

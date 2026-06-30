@@ -62,9 +62,9 @@ import Layout from "@/layouts/Layout.astro";
 
   #bits {
     font-family: "Menlo", monospace;
-    margin: 5px 16px 16px;
+    margin: 5px 8px 16px;
     position: relative;
-    width: calc(176px + 2.5ch);
+    width: calc(180px + 5ch);
   }
 
   #decoded {
@@ -75,7 +75,7 @@ import Layout from "@/layouts/Layout.astro";
   }
 
   #bits :global(.byte) {
-    grid-template-columns: repeat(8, 18px) 2.5ch;
+    grid-template-columns: repeat(8, 18px) 3ch 2ch;
     height: 18px;
     position: absolute;
     top: 0;
@@ -88,8 +88,10 @@ import Layout from "@/layouts/Layout.astro";
     margin: 0;
   }
 
-  #bits :global(.hex) {
-    text-align: right;
+  #bits :global(.hex),
+  #bits :global(.character) {
+    line-height: 18px;
+    height: 18px;
   }
 
   hr {
