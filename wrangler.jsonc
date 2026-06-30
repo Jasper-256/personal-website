@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "jas-site-astro",
+  "account_id": "74fb34d70bac00863c803ec7da668548",
   "main": "src/utf8-worker.ts",
   "compatibility_date": "2025-11-18",
   "assets": {
