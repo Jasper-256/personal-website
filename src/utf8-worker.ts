@@ -8,7 +8,7 @@ const GLOBAL_OBJECT_NAME = "global";
 const PATCH_INTERVAL_MS = 250;
 const FULL_STATE_INTERVAL_MS = 10_000;
 
-type Change = [number, number];
+type Change = [number, number, number];
 type ClientMessage = { type: "patch"; changes: Change[] };
 
 interface Env {
@@ -18,7 +18,7 @@ interface Env {
 
 export class Utf8State extends DurableObject<Env> {
   private bytes = new Uint8Array(BYTE_COUNT);
-  private pendingChanges = new Map<number, number>();
+  private pendingChanges = new Map<number, Change>();
   private patchTimer: ReturnType<typeof setTimeout> | undefined;
   private dirty = false;
 
@@ -52,9 +52,9 @@ export class Utf8State extends DurableObject<Env> {
     const changes = this.readChanges(message);
     if (!changes.length) return;
 
-    changes.forEach(([byteIndex, value]) => {
+    changes.forEach(([byteIndex, value, originatedAt]) => {
       this.bytes[byteIndex] = value;
-      this.pendingChanges.set(byteIndex, value);
+      this.pendingChanges.set(byteIndex, [byteIndex, value, originatedAt]);
     });
 
     this.dirty = true;
@@ -89,10 +89,12 @@ export class Utf8State extends DurableObject<Env> {
         Array.isArray(change) &&
         Number.isInteger(change[0]) &&
         Number.isInteger(change[1]) &&
+        Number.isInteger(change[2]) &&
         change[0] >= 0 &&
         change[0] < BYTE_COUNT &&
         change[1] >= 0 &&
-        change[1] <= 255,
+        change[1] <= 255 &&
+        change[2] >= 0,
     );
   }
 
@@ -104,7 +106,7 @@ export class Utf8State extends DurableObject<Env> {
     this.patchTimer = undefined;
 
     if (this.pendingChanges.size) {
-      this.broadcast({ type: "patch", changes: [...this.pendingChanges] });
+      this.broadcast({ type: "patch", changes: [...this.pendingChanges.values()] });
       this.pendingChanges.clear();
     }
 
