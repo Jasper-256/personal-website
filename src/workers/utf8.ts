@@ -2,7 +2,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 
-const BYTE_COUNT = 1024;
+const BYTE_COUNT = 4096;
 const STATE_KEY = "utf8-bytes";
 const GLOBAL_OBJECT_NAME = "global";
 const UTF8_PATHS = new Set(["/utf8", "/utf8.html"]);
@@ -29,7 +29,7 @@ export class Utf8State extends DurableObject<Utf8Env> {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
       const stored = await ctx.storage.get<number[]>(STATE_KEY);
-      if (stored) this.bytes.set(stored.slice(0, BYTE_COUNT));
+      this.bytes.set(normalizeStoredBytes(stored));
     });
   }
 
@@ -147,6 +147,12 @@ export class Utf8State extends DurableObject<Utf8Env> {
     const text = JSON.stringify(message);
     this.ctx.getWebSockets().forEach((socket) => socket.send(text));
   }
+}
+
+function normalizeStoredBytes(stored: number[] | undefined): Uint8Array {
+  const bytes = new Uint8Array(BYTE_COUNT);
+  if (stored) bytes.set(stored.slice(0, BYTE_COUNT));
+  return bytes;
 }
 
 export async function handleUtf8Request(request: Request, env: Utf8Env): Promise<Response | undefined> {
