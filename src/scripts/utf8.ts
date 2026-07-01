@@ -23,7 +23,7 @@ type WindowWithInitialState = Window & { __UTF8_INITIAL_STATE__?: string };
 bits.style.height = `${BYTE_COUNT * ROW_PITCH - ROW_GAP}px`;
 
 function renderText(): void {
-  decoded.textContent = decoder.decode(bytes);
+  decoded.textContent = decoder.decode(bytes.filter(Boolean));
 }
 
 function createRow(byteIndex: number): HTMLDivElement {
@@ -101,6 +101,8 @@ function decodeAt(byteIndex: number): [string, number] | undefined {
 }
 
 function characterAt(byteIndex: number): string {
+  if (bytes[byteIndex] === 0) return "";
+
   for (let start = Math.max(0, byteIndex - 3); start < byteIndex; start++) {
     const decoded = decodeAt(start);
     if (decoded && start + decoded[1] > byteIndex) return "";
