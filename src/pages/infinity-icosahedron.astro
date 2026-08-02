@@ -1,0 +1,47 @@
+---
+import InfinityIcosahedron from "@/components/InfinityIcosahedron";
+import TopNav from "@/components/TopNav.astro";
+import "@/styles/infinity-icosahedron.css";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1"
+    />
+    <meta
+      name="description"
+      content="A real-time optical study of light inside a mirrored icosahedron."
+    />
+    <meta name="theme-color" content="#05070a" />
+    <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16" />
+    <title>Infinity Icosahedron - Jasper Morgal</title>
+  </head>
+  <body>
+    <div class="icosahedron-nav">
+      <TopNav />
+    </div>
+    <InfinityIcosahedron client:only="react" />
+  </body>
+</html>
+
+<style>
+  .icosahedron-nav {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 10;
+    pointer-events: none;
+    -webkit-font-smoothing: auto;
+  }
+
+  .icosahedron-nav :global(.topnav a) {
+    color: #d0d0d0;
+    pointer-events: auto;
+  }
+</style>
