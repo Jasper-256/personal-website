@@ -8,6 +8,7 @@ const MIRROR_BOUNCES = 20;
 const POST_PROCESS_SAMPLES = 20;
 const REFLECTION_FADE_RATE = 0.1;
 const MOMENTUM_DECAY_MS = 200;
+const PINCH_ZOOM_SENSITIVITY = 1.5;
 const FRAME_RADIUS = 0.043;
 const ICOSAHEDRON_RADIUS = 1.56;
 const SQUARE_VIEWPORT_DEFAULT_ZOOM = 5.55;
@@ -256,10 +257,8 @@ vec3 studioEnvironment(vec3 direction) {
   return color;
 }
 
-vec3 background(vec3 ro, vec3 rd) {
-  vec3 color = studioEnvironment(rd) * 0.38;
-  vec3 wallColor = color;
-
+float backgroundShadow(vec3 ro, vec3 rd) {
+  float shadow = 1.0;
   if (rd.y < -0.0001) {
     float floorT = (-1.50 - ro.y) / rd.y;
     if (floorT > 0.0) {
@@ -272,21 +271,16 @@ vec3 background(vec3 ro, vec3 rd) {
         -point.x * point.x * 0.52 -
         point.z * point.z * 0.24
       );
-      vec3 floorReflection = studioEnvironment(
-        reflect(rd, vec3(0.0, 1.0, 0.0))
-      );
-      float concrete = hash21(point.xz * 93.7) - 0.5;
-      vec3 floorColor =
-        vec3(0.023, 0.0225, 0.0215) + concrete * 0.0016;
-      floorColor += floorReflection * 0.060;
-      floorColor *= 1.0 - contact * 0.86 - broadShadow * 0.10;
-      floorColor += vec3(0.08, 0.13, 0.17) * contact * 0.022;
       float floorBlend = smoothstep(0.005, 0.115, -rd.y);
-      color = mix(wallColor, floorColor, floorBlend);
+      shadow = mix(
+        1.0,
+        1.0 - contact * 0.72 - broadShadow * 0.08,
+        floorBlend
+      );
     }
   }
 
-  return color;
+  return shadow;
 }
 
 vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
@@ -463,6 +457,7 @@ void main() {
   int farFace = 0;
   bool glassHit = false;
   float sceneDepth = 1.0;
+  float pageShadow = 1.0;
 
   if (intersectsBoundingSphere(ro, rd)) {
     glassHit = intersectIcosahedron(
@@ -528,7 +523,8 @@ void main() {
     sceneDepth =
       (depthA * cameraZ + depthB) / (-cameraZ) * 0.5 + 0.5;
   } else {
-    color = background(worldRo, worldRd);
+    pageShadow = backgroundShadow(worldRo, worldRd);
+    color = vec3(0.0);
   }
 
   float vignette = dot(vUv - 0.5, vUv - 0.5);
@@ -538,6 +534,24 @@ void main() {
   color += grain * 0.0045;
   color = acesToneMap(color * 0.98);
   color = pow(color, vec3(0.4545));
+  if (!glassHit) {
+    // Match the website's dark-mode page background (#141414).
+    const float pageLevel = 0.0784314;
+    float shadowLevel = pageLevel * pageShadow;
+    float shadowDepth = pageLevel - shadowLevel;
+    float ditherStrength = smoothstep(
+      0.0,
+      1.0 / 255.0,
+      shadowDepth
+    );
+    float shadowDither =
+      (hash21(gl_FragCoord.xy) - 0.5) *
+      (1.0 / 255.0) *
+      ditherStrength;
+    color = vec3(
+      clamp(shadowLevel + shadowDither, 0.0, pageLevel)
+    );
+  }
   outColor = vec4(color, 1.0);
   gl_FragDepth = sceneDepth;
 }`;
@@ -1740,7 +1754,10 @@ export default function MirrorChamber() {
             ) {
               const zoom =
                 controls.zoom *
-                (previousPinchDistance / pinchDistance);
+                Math.pow(
+                  previousPinchDistance / pinchDistance,
+                  PINCH_ZOOM_SENSITIVITY,
+                );
               controls.zoom = Math.max(
                 MIN_ZOOM,
                 Math.min(MAX_ZOOM, zoom),
