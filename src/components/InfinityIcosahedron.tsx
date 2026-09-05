@@ -217,22 +217,40 @@ float intersectInterior(
   normal = vec3(0.0, 0.0, 1.0);
   faceIndex = 0;
 
-  for (int i = 0; i < FACE_COUNT; i++) {
-    vec3 faceNormal = PLANES[i].xyz;
-    float denominator = dot(faceNormal, rd);
+  // Opposite faces share a projection; only the outward-facing one can
+  // be the exit. Keep the original intersection thresholds and arithmetic.
+  ${[
+    [0, 9],
+    [1, 8],
+    [2, 14],
+    [3, 13],
+    [4, 15],
+    [5, 11],
+    [6, 10],
+    [7, 12],
+    [16, 19],
+    [17, 18],
+  ]
+    .map(
+      ([positiveFace, negativeFace]) => `{
+    vec3 axis = PLANES[${positiveFace}].xyz;
+    float signedDenominator = dot(axis, rd);
+    float denominator = abs(signedDenominator);
     if (denominator > 0.00001) {
-      float numerator =
-        PLANES[i].w - dot(faceNormal, ro);
-      if (
-        numerator > 0.0002 * denominator &&
-        numerator < nearest * denominator
-      ) {
+      bool positive = signedDenominator > 0.0;
+      float originProjection = dot(axis, ro);
+      float numerator = PLANES[${positiveFace}].w -
+        (positive ? originProjection : -originProjection);
+      if (numerator > 0.0002 * denominator && numerator < nearest * denominator) {
         nearest = numerator / denominator;
-        normal = faceNormal;
-        faceIndex = i;
+        normal = positive ? axis : -axis;
+        faceIndex = positive ? ${positiveFace} : ${negativeFace};
       }
     }
-  }
+  }`,
+    )
+    .join("\n")}
+
   return nearest;
 }
 
@@ -286,12 +304,6 @@ float backgroundShadow(vec3 ro, vec3 rd) {
 vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
   vec3 radiance = vec3(0.0);
   vec3 throughput = vec3(1.0);
-  vec4 entryEdgeOriginA = uFaceEdgeOriginA[entryFace];
-  vec4 entryEdgeOriginB = uFaceEdgeOriginB[entryFace];
-  vec4 entryEdgeOriginC = uFaceEdgeOriginC[entryFace];
-  vec4 entryEdgeDirectionA = uFaceEdgeDirectionA[entryFace];
-  vec4 entryEdgeDirectionB = uFaceEdgeDirectionB[entryFace];
-  vec4 entryEdgeDirectionC = uFaceEdgeDirectionC[entryFace];
   float entryEdgeDistance = faceEdgeDistance(ro, entryFace);
 
   for (int bounce = 0; bounce < MIRROR_BOUNCES; bounce++) {
@@ -311,7 +323,7 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
     vec4 exitEdgeDirectionC = uFaceEdgeDirectionC[faceIndex];
     vec2 candidate = raySegmentDistance(
       ro, rd, wallT,
-      entryEdgeOriginA, entryEdgeDirectionA
+      uFaceEdgeOriginA[entryFace], uFaceEdgeDirectionA[entryFace]
     );
     if (candidate.x < nearestBarSquared) {
       nearestBarSquared = candidate.x;
@@ -319,7 +331,7 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
     }
     candidate = raySegmentDistance(
       ro, rd, wallT,
-      entryEdgeOriginB, entryEdgeDirectionB
+      uFaceEdgeOriginB[entryFace], uFaceEdgeDirectionB[entryFace]
     );
     if (candidate.x < nearestBarSquared) {
       nearestBarSquared = candidate.x;
@@ -327,7 +339,7 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
     }
     candidate = raySegmentDistance(
       ro, rd, wallT,
-      entryEdgeOriginC, entryEdgeDirectionC
+      uFaceEdgeOriginC[entryFace], uFaceEdgeDirectionC[entryFace]
     );
     if (candidate.x < nearestBarSquared) {
       nearestBarSquared = candidate.x;
@@ -414,12 +426,7 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
 
     rd = reflect(rd, faceNormal);
     ro = hit - faceNormal * 0.0012;
-    entryEdgeOriginA = exitEdgeOriginA;
-    entryEdgeOriginB = exitEdgeOriginB;
-    entryEdgeOriginC = exitEdgeOriginC;
-    entryEdgeDirectionA = exitEdgeDirectionA;
-    entryEdgeDirectionB = exitEdgeDirectionB;
-    entryEdgeDirectionC = exitEdgeDirectionC;
+    entryFace = faceIndex;
   }
 
   return radiance;
