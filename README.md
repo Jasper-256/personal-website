@@ -6,23 +6,23 @@ Personal website featuring interactive projects, games, and experiments with int
 
 ## Projects
 
-- **[Public Chat](https://jaspermorgal.com/projects/chat)** - A public chat room where anyone can send messages that everyone can see.
-- **[World Population](https://jaspermorgal.com/projects/population)** - Real-time world population counter.
+- **[Public Chat](https://jaspermorgal.com/chat)** - A public chat room where anyone can send messages that everyone can see.
+- **[World Population](https://jaspermorgal.com/population)** - Real-time world population counter.
 
 ### Time Formats
 
 A collection of unique and interesting time representations displayed in real-time:
 
-- **[All Time Formats](https://jaspermorgal.com/projects/time)** - View all time formats at once.
-- **[Percent Time](https://jaspermorgal.com/projects/time/percent-time)** - Time as a percentage of the day.
-- **[Unix Time Prime Factorization](https://jaspermorgal.com/projects/time/unix-prime)** - Unix timestamp broken into prime factors.
-- **[Age of the Universe](https://jaspermorgal.com/projects/time/universe-age)** - Current age of the universe.
+- **[All Time Formats](https://jaspermorgal.com/time)** - View all time formats at once.
+- **[Percent Time](https://jaspermorgal.com/time/percent-time)** - Time as a percentage of the day.
+- **[Unix Time Prime Factorization](https://jaspermorgal.com/time/unix-prime)** - Unix timestamp broken into prime factors.
+- **[Age of the Universe](https://jaspermorgal.com/time/universe-age)** - Current age of the universe.
 
 ## Games
 
-- **[Tic-tac-toe](https://jaspermorgal.com/games/tictactoe)** - Unbeatable tic-tac-toe game.
-- **[Prime Factorization Challenge](https://jaspermorgal.com/games/pfc)** - See how big of prime numbers you can factor.
-- **[Jump Game](https://jaspermorgal.com/games/jump)** - A simple ASCII jumping game.
+- **[Tic-tac-toe](https://jaspermorgal.com/tictactoe)** - Unbeatable tic-tac-toe game.
+- **[Prime Factorization Challenge](https://jaspermorgal.com/pfc)** - See how big of prime numbers you can factor.
+- **[Jump Game](https://jaspermorgal.com/jump)** - A simple ASCII jumping game.
 
 ## Tech Stack
 
