@@ -7,6 +7,8 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   integrations: [react()],
   output: "static",
+  // Preserve spaces between inline elements across the Astro 7 upgrade.
+  compressHTML: true,
   trailingSlash: "never",
   build: {
     format: "file",

@@ -31,12 +31,17 @@ A collection of unique and interesting time representations displayed in real-ti
 
 ## Development
 
+Use Node.js 26.10.0 or newer (`nvm install && nvm use` reads `.nvmrc`).
+
 ```bash
 # Install dependencies
-npm install
+npm ci
 
 # Start dev server
 npm run dev
+
+# Check TypeScript and Worker types
+npm run check
 
 # Build for production
 npm run build

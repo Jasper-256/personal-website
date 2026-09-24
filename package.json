@@ -2,29 +2,36 @@
   "name": "jas-site-astro",
   "type": "module",
   "version": "0.0.1",
+  "engines": {
+    "node": ">=26.10.0"
+  },
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "check": "astro sync && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
     "cf:dev": "npm run build && wrangler dev",
     "cf:deploy": "npm run build && wrangler deploy",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^12.6.12",
-    "@astrojs/react": "^4.4.2",
-    "@tailwindcss/vite": "^4.1.18",
-    "astro": "^5.16.15",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "tailwindcss": "^4.1.18",
-    "three": "^0.185.1"
+    "@astrojs/cloudflare": "^14.3.3",
+    "@astrojs/react": "^7.0.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.3.5",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
+    "three": "^0.186.1"
   },
   "devDependencies": {
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "@types/three": "^0.185.3",
-    "prettier": "^3.8.1",
-    "prettier-plugin-astro": "^0.14.1"
+    "@cloudflare/workers-types": "^5.20260924.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "prettier": "^3.9.9",
+    "prettier-plugin-astro": "^1.1.0",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.139.0"
   }
 }
