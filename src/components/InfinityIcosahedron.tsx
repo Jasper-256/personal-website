@@ -913,6 +913,7 @@ type Point = [number, number, number];
 
 type GeometryData = {
   frameVertices: Float32Array;
+  frameIndices: Uint16Array;
 };
 
 function buildBounceLighting(): Float32Array {
@@ -970,6 +971,7 @@ function appendFrameVertex(
 
 function appendFrameCylinder(
   target: number[],
+  indices: number[],
   a: Point,
   b: Point,
 ) {
@@ -998,28 +1000,29 @@ function appendFrameCylinder(
     point[2] + normal[2] * FRAME_RADIUS,
   ];
 
-  for (let segment = 0; segment < radialSegments; segment++) {
-    const normalA = radialAt(
+  const baseVertex = target.length / 6;
+  // Keep both seam vertices: their generated Float32 normals can differ.
+  for (let segment = 0; segment <= radialSegments; segment++) {
+    const normal = radialAt(
       (segment / radialSegments) * Math.PI * 2,
     );
-    const normalB = radialAt(
-      ((segment + 1) / radialSegments) * Math.PI * 2,
-    );
-    const a0 = offsetPoint(a, normalA);
-    const a1 = offsetPoint(a, normalB);
-    const b0 = offsetPoint(b, normalA);
-    const b1 = offsetPoint(b, normalB);
-
-    appendFrameVertex(target, a0, normalA);
-    appendFrameVertex(target, b0, normalA);
-    appendFrameVertex(target, b1, normalB);
-    appendFrameVertex(target, a0, normalA);
-    appendFrameVertex(target, b1, normalB);
-    appendFrameVertex(target, a1, normalB);
+    appendFrameVertex(target, offsetPoint(a, normal), normal);
+    appendFrameVertex(target, offsetPoint(b, normal), normal);
+  }
+  for (let segment = 0; segment < radialSegments; segment++) {
+    const a0 = baseVertex + segment * 2;
+    const b0 = a0 + 1;
+    const a1 = a0 + 2;
+    const b1 = a0 + 3;
+    indices.push(a0, b0, b1, a0, b1, a1);
   }
 }
 
-function appendFrameSphere(target: number[], center: Point) {
+function appendFrameSphere(
+  target: number[],
+  indices: number[],
+  center: Point,
+) {
   const latitudeSegments = 12;
   const longitudeSegments = 24;
   const normalAt = (
@@ -1044,31 +1047,22 @@ function appendFrameSphere(target: number[], center: Point) {
     center[2] + normal[2] * FRAME_RADIUS,
   ];
 
-  for (
-    let latitude = 0;
-    latitude < latitudeSegments;
-    latitude++
-  ) {
-    for (
-      let longitude = 0;
-      longitude < longitudeSegments;
-      longitude++
-    ) {
-      const normal00 = normalAt(latitude, longitude);
-      const normal01 = normalAt(latitude, longitude + 1);
-      const normal10 = normalAt(latitude + 1, longitude);
-      const normal11 = normalAt(latitude + 1, longitude + 1);
-      const point00 = positionAt(normal00);
-      const point01 = positionAt(normal01);
-      const point10 = positionAt(normal10);
-      const point11 = positionAt(normal11);
-
-      appendFrameVertex(target, point00, normal00);
-      appendFrameVertex(target, point10, normal10);
-      appendFrameVertex(target, point11, normal11);
-      appendFrameVertex(target, point00, normal00);
-      appendFrameVertex(target, point11, normal11);
-      appendFrameVertex(target, point01, normal01);
+  const baseVertex = target.length / 6;
+  const stride = longitudeSegments + 1;
+  // Retain seam and pole vertices, including their original signed zeros.
+  for (let latitude = 0; latitude <= latitudeSegments; latitude++) {
+    for (let longitude = 0; longitude <= longitudeSegments; longitude++) {
+      const normal = normalAt(latitude, longitude);
+      appendFrameVertex(target, positionAt(normal), normal);
+    }
+  }
+  for (let latitude = 0; latitude < latitudeSegments; latitude++) {
+    for (let longitude = 0; longitude < longitudeSegments; longitude++) {
+      const point00 = baseVertex + latitude * stride + longitude;
+      const point01 = point00 + 1;
+      const point10 = point00 + stride;
+      const point11 = point10 + 1;
+      indices.push(point00, point10, point11, point00, point11, point01);
     }
   }
 }
@@ -1118,6 +1112,7 @@ function buildIcosahedron(): GeometryData {
   }
 
   const frameVertices: number[] = [];
+  const frameIndices: number[] = [];
   for (let i = 0; i < vertices.length; i++) {
     for (let j = i + 1; j < vertices.length; j++) {
       if (
@@ -1126,16 +1121,17 @@ function buildIcosahedron(): GeometryData {
       ) {
         const a = vertices[i];
         const b = vertices[j];
-        appendFrameCylinder(frameVertices, a, b);
+        appendFrameCylinder(frameVertices, frameIndices, a, b);
       }
     }
   }
   for (const vertex of vertices) {
-    appendFrameSphere(frameVertices, vertex);
+    appendFrameSphere(frameVertices, frameIndices, vertex);
   }
 
   return {
     frameVertices: new Float32Array(frameVertices),
+    frameIndices: new Uint16Array(frameIndices),
   };
 }
 
@@ -1369,10 +1365,10 @@ export default function MirrorChamber() {
           false,
         ),
       );
-      frameGeometry.setDrawRange(
-        0,
-        geometry.frameVertices.length / 6,
+      frameGeometry.setIndex(
+        new THREE.BufferAttribute(geometry.frameIndices, 1),
       );
+      frameGeometry.setDrawRange(0, geometry.frameIndices.length);
 
       const rotationMatrix = new Float32Array(9);
       const sceneRotation = new THREE.Matrix3();
