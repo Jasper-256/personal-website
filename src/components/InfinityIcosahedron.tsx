@@ -11,6 +11,13 @@ const MOMENTUM_DECAY_MS = 200;
 const PINCH_ZOOM_SENSITIVITY = 1.5;
 const FRAME_RADIUS = 0.043;
 const ICOSAHEDRON_RADIUS = 1.56;
+const ICOSAHEDRON_EDGE_LENGTH =
+  (4 * ICOSAHEDRON_RADIUS) / Math.sqrt(10 + 2 * Math.sqrt(5));
+const LIGHT_BAR_TRIM = 0.035;
+const FACE_PLANE_DISTANCE =
+  (ICOSAHEDRON_EDGE_LENGTH * Math.sqrt(3) * (3 + Math.sqrt(5))) / 12;
+const FACE_EDGE_INRADIUS = ICOSAHEDRON_EDGE_LENGTH / (2 * Math.sqrt(3));
+const LIGHT_BAR_HALF_LENGTH = ICOSAHEDRON_EDGE_LENGTH * (0.5 - LIGHT_BAR_TRIM);
 const SQUARE_VIEWPORT_DEFAULT_ZOOM = 5.55;
 const DRAG_RADIANS_ACROSS_SHAPE = Math.PI * 0.75;
 const MIN_ZOOM = 1.72;
@@ -34,12 +41,6 @@ uniform vec2 uResolution;
 uniform float uTime;
 uniform mat3 uRotation;
 uniform float uZoom;
-uniform vec4 uFaceEdgeOriginA[20];
-uniform vec4 uFaceEdgeOriginB[20];
-uniform vec4 uFaceEdgeOriginC[20];
-uniform vec4 uFaceEdgeDirectionA[20];
-uniform vec4 uFaceEdgeDirectionB[20];
-uniform vec4 uFaceEdgeDirectionC[20];
 uniform vec4 uBounceLighting[${MIRROR_BOUNCES}];
 
 #define FACE_COUNT 20
@@ -73,66 +74,166 @@ const float LIGHT_CORE_RADIUS = 0.014;
 const float MIRROR_EDGE_INSET = 0.043;
 const float BOUNDING_RADIUS_SQUARED = 2.5921;
 
+// Orthonormal bases map every face to the same equilateral triangle.
+const vec3 FACE_U[20] = vec3[20](
+  vec3(-0.866025403784, 0.178411044887, -0.467086179481),
+  vec3(-0.866025403784, 0.178411044887, 0.467086179481),
+  vec3(-0.110264089708, 0.645497224368, -0.755761314076),
+  vec3(-0.110264089708, 0.645497224368, 0.755761314076),
+  vec3(0.356822089773, 0.934172358963, 0.000000000000),
+  vec3(0.110264089708, 0.645497224368, -0.755761314076),
+  vec3(0.110264089708, 0.645497224368, 0.755761314076),
+  vec3(-0.356822089773, 0.934172358963, 0.000000000000),
+  vec3(-0.866025403784, -0.178411044887, -0.467086179481),
+  vec3(-0.866025403784, -0.178411044887, 0.467086179481),
+  vec3(-0.110264089708, -0.645497224368, -0.755761314076),
+  vec3(-0.110264089708, -0.645497224368, 0.755761314076),
+  vec3(0.356822089773, -0.934172358963, 0.000000000000),
+  vec3(0.110264089708, -0.645497224368, -0.755761314076),
+  vec3(0.110264089708, -0.645497224368, 0.755761314076),
+  vec3(-0.356822089773, -0.934172358963, 0.000000000000),
+  vec3(-0.467086179481, -0.866025403784, 0.178411044887),
+  vec3(0.467086179481, -0.866025403784, 0.178411044887),
+  vec3(-0.467086179481, -0.866025403784, -0.178411044887),
+  vec3(0.467086179481, -0.866025403784, -0.178411044887)
+);
+const vec3 FACE_V[20] = vec3[20](
+  vec3(-0.500000000000, -0.309016994375, 0.809016994375),
+  vec3(0.500000000000, 0.309016994375, 0.809016994375),
+  vec3(-0.809016994375, -0.500000000000, -0.309016994375),
+  vec3(0.809016994375, 0.500000000000, -0.309016994375),
+  vec3(0.000000000000, 0.000000000000, -1.000000000000),
+  vec3(-0.809016994375, 0.500000000000, 0.309016994375),
+  vec3(0.809016994375, -0.500000000000, 0.309016994375),
+  vec3(0.000000000000, 0.000000000000, 1.000000000000),
+  vec3(0.500000000000, -0.309016994375, -0.809016994375),
+  vec3(-0.500000000000, 0.309016994375, -0.809016994375),
+  vec3(0.809016994375, -0.500000000000, 0.309016994375),
+  vec3(-0.809016994375, 0.500000000000, 0.309016994375),
+  vec3(0.000000000000, 0.000000000000, 1.000000000000),
+  vec3(0.809016994375, 0.500000000000, -0.309016994375),
+  vec3(-0.809016994375, -0.500000000000, -0.309016994375),
+  vec3(0.000000000000, 0.000000000000, -1.000000000000),
+  vec3(0.809016994375, -0.500000000000, -0.309016994375),
+  vec3(0.809016994375, 0.500000000000, 0.309016994375),
+  vec3(-0.809016994375, 0.500000000000, -0.309016994375),
+  vec3(-0.809016994375, -0.500000000000, 0.309016994375)
+);
+const float FACE_PLANE_DISTANCE = ${FACE_PLANE_DISTANCE.toFixed(12)};
+const float FACE_EDGE_INRADIUS = ${FACE_EDGE_INRADIUS.toFixed(12)};
+const float FACE_EDGE_HALF_LENGTH = ${LIGHT_BAR_HALF_LENGTH.toFixed(12)};
+const float SQRT_THREE_OVER_TWO = 0.866025403784;
+
+vec3 faceLocalPoint(vec3 point, int face) {
+  return vec3(
+    dot(point, FACE_U[face]),
+    dot(point, FACE_V[face]),
+    dot(point, PLANES[face].xyz) - FACE_PLANE_DISTANCE
+  );
+}
+
+vec3 faceLocalDirection(vec3 direction, int face) {
+  return vec3(
+    dot(direction, FACE_U[face]),
+    dot(direction, FACE_V[face]),
+    dot(direction, PLANES[face].xyz)
+  );
+}
+
+vec3 faceEdgeAcross(vec2 point) {
+  return vec3(
+    -point.x,
+    0.5 * point.x + SQRT_THREE_OVER_TWO * point.y,
+    0.5 * point.x - SQRT_THREE_OVER_TWO * point.y
+  );
+}
+
+vec3 faceEdgeAlong(vec2 point) {
+  return vec3(
+    -point.y,
+    -SQRT_THREE_OVER_TWO * point.x + 0.5 * point.y,
+    SQRT_THREE_OVER_TWO * point.x + 0.5 * point.y
+  );
+}
+
+vec2 faceRayDistance(
+  vec3 rayOrigin,
+  vec3 rayDirection,
+  float rayLength,
+  int face
+) {
+  vec3 point = faceLocalPoint(rayOrigin, face);
+  vec3 direction = faceLocalDirection(rayDirection, face);
+  vec3 across = faceEdgeAcross(point.xy) - FACE_EDGE_INRADIUS;
+  vec3 acrossDirection = faceEdgeAcross(direction.xy);
+  vec3 alongDirection = faceEdgeAlong(direction.xy);
+  // A sum of squares stays stable when a ray nearly parallels a light bar.
+  vec3 denominator = acrossDirection * acrossDirection +
+    vec3(direction.z * direction.z);
+  vec3 safeDenominator = mix(
+    denominator,
+    vec3(1.0),
+    equal(denominator, vec3(0.0))
+  );
+  vec3 projectedSeparation = acrossDirection * across +
+    vec3(direction.z * point.z);
+  vec3 rayAlong = clamp(
+    -projectedSeparation / safeDenominator,
+    vec3(0.0),
+    vec3(rayLength)
+  );
+  vec3 acrossSeparation = across + rayAlong * acrossDirection;
+  vec3 normalSeparation = vec3(point.z) + rayAlong * direction.z;
+  vec3 distances = acrossSeparation * acrossSeparation +
+    normalSeparation * normalSeparation;
+  vec3 along = faceEdgeAlong(point.xy);
+  vec3 edgeAlong = along + rayAlong * alongDirection;
+  vec2 nearest = vec2(distances.x, rayAlong.x);
+  float nearestEdgeAlong = edgeAlong.x;
+  if (distances.y < nearest.x) {
+    nearest = vec2(distances.y, rayAlong.y);
+    nearestEdgeAlong = edgeAlong.y;
+  }
+  if (distances.z < nearest.x) {
+    nearest = vec2(distances.z, rayAlong.z);
+    nearestEdgeAlong = edgeAlong.z;
+  }
+
+  // Infinite-edge distances are lower bounds for the trimmed light bars.
+  // If the nearest point lies on its bar, no other finite bar can be closer.
+  if (abs(nearestEdgeAlong) <= FACE_EDGE_HALF_LENGTH) return nearest;
+
+  vec3 endpoint = clamp(
+    edgeAlong,
+    vec3(-FACE_EDGE_HALF_LENGTH),
+    vec3(FACE_EDGE_HALF_LENGTH)
+  );
+  vec3 endpointRayAlong = clamp(
+    -(alongDirection * (along - endpoint) + projectedSeparation),
+    vec3(0.0),
+    vec3(rayLength)
+  );
+  rayAlong = mix(
+    rayAlong,
+    endpointRayAlong,
+    greaterThan(abs(edgeAlong), vec3(FACE_EDGE_HALF_LENGTH))
+  );
+  vec3 alongSeparation = along + rayAlong * alongDirection - endpoint;
+  acrossSeparation = across + rayAlong * acrossDirection;
+  normalSeparation = vec3(point.z) + rayAlong * direction.z;
+  distances = alongSeparation * alongSeparation +
+    acrossSeparation * acrossSeparation +
+    normalSeparation * normalSeparation;
+  nearest = vec2(distances.x, rayAlong.x);
+  if (distances.y < nearest.x) nearest = vec2(distances.y, rayAlong.y);
+  if (distances.z < nearest.x) nearest = vec2(distances.z, rayAlong.z);
+  return nearest;
+}
+
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
   p += dot(p, p + 45.32);
   return fract(p.x * p.y);
-}
-
-float edgeLineDistanceSquared(
-  vec3 point,
-  vec4 edgeOrigin,
-  vec4 edgeDirection
-) {
-  vec3 offsetFromOrigin = point - edgeOrigin.xyz;
-  float along = dot(
-    offsetFromOrigin,
-    edgeDirection.xyz
-  ) * edgeOrigin.w;
-  vec3 offset =
-    offsetFromOrigin - edgeDirection.xyz * along;
-  return dot(offset, offset);
-}
-
-vec2 raySegmentDistance(
-  vec3 rayOrigin,
-  vec3 rayDirection,
-  float rayLength,
-  vec4 edgeOriginData,
-  vec4 edgeDirectionData
-) {
-  vec3 edgeOrigin = edgeOriginData.xyz;
-  vec3 edgeDirection = edgeDirectionData.xyz;
-  vec3 separationFromEdge = rayOrigin - edgeOrigin;
-  float e = edgeDirectionData.w;
-  float inverseE = edgeOriginData.w;
-  float f = dot(edgeDirection, separationFromEdge);
-  float c = dot(rayDirection, separationFromEdge);
-  float b = dot(rayDirection, edgeDirection);
-  float s;
-  float t;
-  float denominator = e - b * b;
-  s = denominator != 0.0
-    ? clamp(
-        (b * f - c * e) / denominator,
-        0.0,
-        rayLength
-      )
-    : 0.0;
-  t = (b * s + f) * inverseE;
-
-  if (t < 0.0) {
-    t = 0.0;
-    s = clamp(-c, 0.0, rayLength);
-  } else if (t > 1.0) {
-    t = 1.0;
-    s = clamp(b - c, 0.0, rayLength);
-  }
-
-  vec3 separation =
-    (rayOrigin + rayDirection * s) -
-    (edgeOrigin + edgeDirection * t);
-  return vec2(dot(separation, separation), s);
 }
 
 bool intersectsBoundingSphere(vec3 ro, vec3 rd) {
@@ -146,26 +247,12 @@ bool intersectsBoundingSphere(vec3 ro, vec3 rd) {
 }
 
 float faceEdgeDistance(vec3 point, int faceIndex) {
+  vec3 localPoint = faceLocalPoint(point, faceIndex);
+  vec3 across = faceEdgeAcross(localPoint.xy) - FACE_EDGE_INRADIUS;
+  vec3 squared = across * across;
   return sqrt(
-    min(
-      edgeLineDistanceSquared(
-        point,
-        uFaceEdgeOriginA[faceIndex],
-        uFaceEdgeDirectionA[faceIndex]
-      ),
-      min(
-        edgeLineDistanceSquared(
-          point,
-          uFaceEdgeOriginB[faceIndex],
-          uFaceEdgeDirectionB[faceIndex]
-        ),
-        edgeLineDistanceSquared(
-          point,
-          uFaceEdgeOriginC[faceIndex],
-          uFaceEdgeDirectionC[faceIndex]
-        )
-      )
-    )
+    min(squared.x, min(squared.y, squared.z)) +
+    localPoint.z * localPoint.z
   );
 }
 
@@ -313,73 +400,23 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
     float wallT = intersectInterior(ro, rd, faceNormal, faceIndex);
     if (wallT >= FAR - 1.0) break;
 
-    float nearestBarSquared = FAR * FAR;
-    float nearestAlong = 0.0;
-    vec4 exitEdgeOriginA = uFaceEdgeOriginA[faceIndex];
-    vec4 exitEdgeOriginB = uFaceEdgeOriginB[faceIndex];
-    vec4 exitEdgeOriginC = uFaceEdgeOriginC[faceIndex];
-    vec4 exitEdgeDirectionA = uFaceEdgeDirectionA[faceIndex];
-    vec4 exitEdgeDirectionB = uFaceEdgeDirectionB[faceIndex];
-    vec4 exitEdgeDirectionC = uFaceEdgeDirectionC[faceIndex];
-    vec2 candidate = raySegmentDistance(
-      ro, rd, wallT,
-      uFaceEdgeOriginA[entryFace], uFaceEdgeDirectionA[entryFace]
-    );
-    if (candidate.x < nearestBarSquared) {
-      nearestBarSquared = candidate.x;
-      nearestAlong = candidate.y;
-    }
-    candidate = raySegmentDistance(
-      ro, rd, wallT,
-      uFaceEdgeOriginB[entryFace], uFaceEdgeDirectionB[entryFace]
-    );
-    if (candidate.x < nearestBarSquared) {
-      nearestBarSquared = candidate.x;
-      nearestAlong = candidate.y;
-    }
-    candidate = raySegmentDistance(
-      ro, rd, wallT,
-      uFaceEdgeOriginC[entryFace], uFaceEdgeDirectionC[entryFace]
-    );
-    if (candidate.x < nearestBarSquared) {
-      nearestBarSquared = candidate.x;
-      nearestAlong = candidate.y;
-    }
-    candidate = raySegmentDistance(
-      ro, rd, wallT,
-      exitEdgeOriginA, exitEdgeDirectionA
-    );
-    if (candidate.x < nearestBarSquared) {
-      nearestBarSquared = candidate.x;
-      nearestAlong = candidate.y;
-    }
-    candidate = raySegmentDistance(
-      ro, rd, wallT,
-      exitEdgeOriginB, exitEdgeDirectionB
-    );
-    if (candidate.x < nearestBarSquared) {
-      nearestBarSquared = candidate.x;
-      nearestAlong = candidate.y;
-    }
-    candidate = raySegmentDistance(
-      ro, rd, wallT,
-      exitEdgeOriginC, exitEdgeDirectionC
-    );
-    if (candidate.x < nearestBarSquared) {
-      nearestBarSquared = candidate.x;
-      nearestAlong = candidate.y;
-    }
-
+    vec2 entryCandidate = faceRayDistance(ro, rd, wallT, entryFace);
+    vec2 exitCandidate = faceRayDistance(ro, rd, wallT, faceIndex);
+    vec2 closest = exitCandidate.x < entryCandidate.x
+      ? exitCandidate
+      : entryCandidate;
+    float nearestBarSquared = closest.x;
+    float nearestAlong = closest.y;
     float nearestBar = sqrt(nearestBarSquared);
     vec4 bounceLighting = uBounceLighting[bounce];
     vec3 barColor = bounceLighting.rgb;
     float depthLoss = bounceLighting.a;
-    float airLoss = exp(-nearestAlong * 0.035);
-    float opticalBloom = exp(-nearestBar * 42.0);
-    radiance += throughput * depthLoss * airLoss *
-      barColor * opticalBloom * 0.018;
+    // Combine glow and air attenuation into one exponential per bounce.
+    float glow = exp(-nearestBar * 42.0 - nearestAlong * 0.035);
+    radiance += throughput * depthLoss * barColor * glow * 0.018;
 
     if (nearestBar < LIGHT_CORE_RADIUS) {
+      float airLoss = exp(-nearestAlong * 0.035);
       float diffuser = 1.0 -
         smoothstep(0.008, LIGHT_CORE_RADIUS, nearestBar);
       float roundProfile = sqrt(max(
@@ -875,12 +912,6 @@ void main() {
 type Point = [number, number, number];
 
 type GeometryData = {
-  faceEdgeOriginA: Float32Array;
-  faceEdgeOriginB: Float32Array;
-  faceEdgeOriginC: Float32Array;
-  faceEdgeDirectionA: Float32Array;
-  faceEdgeDirectionB: Float32Array;
-  faceEdgeDirectionC: Float32Array;
   frameVertices: Float32Array;
 };
 
@@ -1086,29 +1117,6 @@ function buildIcosahedron(): GeometryData {
     }
   }
 
-  const faces: [number, number, number][] = [];
-  for (let i = 0; i < vertices.length; i++) {
-    for (let j = i + 1; j < vertices.length; j++) {
-      for (let k = j + 1; k < vertices.length; k++) {
-        const isFace =
-          Math.abs(
-            distance(vertices[i], vertices[j]) - edgeLength,
-          ) < 0.001 &&
-          Math.abs(
-            distance(vertices[j], vertices[k]) - edgeLength,
-          ) < 0.001 &&
-          Math.abs(
-            distance(vertices[k], vertices[i]) - edgeLength,
-          ) < 0.001;
-        if (isFace) faces.push([i, j, k]);
-      }
-    }
-  }
-
-  const edgeOrigins: number[] = [];
-  const edgeDirections: number[] = [];
-  const edgeKeys: string[] = [];
-  const edgeIndexByKey = new Map<string, number>();
   const frameVertices: number[] = [];
   for (let i = 0; i < vertices.length; i++) {
     for (let j = i + 1; j < vertices.length; j++) {
@@ -1119,31 +1127,6 @@ function buildIcosahedron(): GeometryData {
         const a = vertices[i];
         const b = vertices[j];
         appendFrameCylinder(frameVertices, a, b);
-        const trim = 0.035;
-        const trimmedA: Point = [
-          a[0] + (b[0] - a[0]) * trim,
-          a[1] + (b[1] - a[1]) * trim,
-          a[2] + (b[2] - a[2]) * trim,
-        ];
-        const trimmedB: Point = [
-          b[0] + (a[0] - b[0]) * trim,
-          b[1] + (a[1] - b[1]) * trim,
-          b[2] + (a[2] - b[2]) * trim,
-        ];
-        const direction: Point = [
-          trimmedB[0] - trimmedA[0],
-          trimmedB[1] - trimmedA[1],
-          trimmedB[2] - trimmedA[2],
-        ];
-        const lengthSquared =
-          direction[0] * direction[0] +
-          direction[1] * direction[1] +
-          direction[2] * direction[2];
-        const edgeKey = `${i}:${j}`;
-        edgeOrigins.push(...trimmedA, 1 / lengthSquared);
-        edgeDirections.push(...direction, lengthSquared);
-        edgeIndexByKey.set(edgeKey, edgeKeys.length);
-        edgeKeys.push(edgeKey);
       }
     }
   }
@@ -1151,59 +1134,7 @@ function buildIcosahedron(): GeometryData {
     appendFrameSphere(frameVertices, vertex);
   }
 
-  const faceEdgeOriginA: number[] = [];
-  const faceEdgeOriginB: number[] = [];
-  const faceEdgeOriginC: number[] = [];
-  const faceEdgeDirectionA: number[] = [];
-  const faceEdgeDirectionB: number[] = [];
-  const faceEdgeDirectionC: number[] = [];
-  const appendFaceEdge = (
-    first: number,
-    second: number,
-    origins: number[],
-    directions: number[],
-  ) => {
-    const low = Math.min(first, second);
-    const high = Math.max(first, second);
-    const edgeIndex = edgeIndexByKey.get(`${low}:${high}`);
-    if (edgeIndex === undefined) {
-      throw new Error("Icosahedron face is missing an edge.");
-    }
-    origins.push(
-      ...edgeOrigins.slice(edgeIndex * 4, edgeIndex * 4 + 4),
-    );
-    directions.push(
-      ...edgeDirections.slice(edgeIndex * 4, edgeIndex * 4 + 4),
-    );
-  };
-  for (const [a, b, c] of faces) {
-    appendFaceEdge(
-      a,
-      b,
-      faceEdgeOriginA,
-      faceEdgeDirectionA,
-    );
-    appendFaceEdge(
-      b,
-      c,
-      faceEdgeOriginB,
-      faceEdgeDirectionB,
-    );
-    appendFaceEdge(
-      c,
-      a,
-      faceEdgeOriginC,
-      faceEdgeDirectionC,
-    );
-  }
-
   return {
-    faceEdgeOriginA: new Float32Array(faceEdgeOriginA),
-    faceEdgeOriginB: new Float32Array(faceEdgeOriginB),
-    faceEdgeOriginC: new Float32Array(faceEdgeOriginC),
-    faceEdgeDirectionA: new Float32Array(faceEdgeDirectionA),
-    faceEdgeDirectionB: new Float32Array(faceEdgeDirectionB),
-    faceEdgeDirectionC: new Float32Array(faceEdgeDirectionC),
     frameVertices: new Float32Array(frameVertices),
   };
 }
@@ -1459,24 +1390,6 @@ export default function MirrorChamber() {
           uTime: { value: 0 },
           uRotation: { value: sceneRotation },
           uZoom: { value: SQUARE_VIEWPORT_DEFAULT_ZOOM },
-          uFaceEdgeOriginA: {
-            value: geometry.faceEdgeOriginA,
-          },
-          uFaceEdgeOriginB: {
-            value: geometry.faceEdgeOriginB,
-          },
-          uFaceEdgeOriginC: {
-            value: geometry.faceEdgeOriginC,
-          },
-          uFaceEdgeDirectionA: {
-            value: geometry.faceEdgeDirectionA,
-          },
-          uFaceEdgeDirectionB: {
-            value: geometry.faceEdgeDirectionB,
-          },
-          uFaceEdgeDirectionC: {
-            value: geometry.faceEdgeDirectionC,
-          },
           uBounceLighting: { value: BOUNCE_LIGHTING },
         },
         depthTest: true,
