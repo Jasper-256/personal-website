@@ -23,8 +23,8 @@ const DRAG_RADIANS_ACROSS_SHAPE = Math.PI * 0.75;
 const MIN_ZOOM = 1.72;
 const MAX_ZOOM = 40;
 
-// Each pair contains the indices of two opposite icosahedron faces.
-// Primary entry tests retain ascending face order to preserve boundary ties.
+// Each pair contains the indices of two opposite icosahedron faces. The
+// first face's normal is the pair's axis; see axisProjections.
 const OPPOSITE_FACE_PAIRS = [
   [0, 9],
   [1, 8],
@@ -108,8 +108,33 @@ const FACE_V_AXES: readonly Point[] = [
   [-0.809016994375, -0.500000000000, 0.309016994375],
 ];
 
-const glslFloat = (value: number) =>
-  Number.isInteger(value) ? value.toFixed(1) : String(value);
+// GLSL for projections of a vector onto the ten opposite-face axes, in the
+// order of OPPOSITE_FACE_PAIRS, as floats named prefix0 through prefix9.
+// Axes with a zero component share products. The (±1, ±1, ±1) axes are left
+// unscaled by 1 / sqrt(3); their plane distance is scaled instead.
+const axisProjections = (vector: string, prefix: string) => `
+  float ${prefix}ay = 0.934172359 * ${vector}.y;
+  float ${prefix}bz = 0.356822090 * ${vector}.z;
+  float ${prefix}ax = 0.934172359 * ${vector}.x;
+  float ${prefix}by = 0.356822090 * ${vector}.y;
+  float ${prefix}bx = 0.356822090 * ${vector}.x;
+  float ${prefix}az = 0.934172359 * ${vector}.z;
+  float ${prefix}yz = ${vector}.y + ${vector}.z;
+  float ${prefix}yMinusZ = ${vector}.y - ${vector}.z;
+  float ${prefix}0 = ${prefix}ay + ${prefix}bz;
+  float ${prefix}1 = ${prefix}ay - ${prefix}bz;
+  float ${prefix}2 = ${prefix}yz - ${vector}.x;
+  float ${prefix}3 = ${prefix}yMinusZ - ${vector}.x;
+  float ${prefix}4 = ${prefix}by - ${prefix}ax;
+  float ${prefix}5 = ${vector}.x + ${prefix}yz;
+  float ${prefix}6 = ${vector}.x + ${prefix}yMinusZ;
+  float ${prefix}7 = ${prefix}ax + ${prefix}by;
+  float ${prefix}8 = ${prefix}bx + ${prefix}az;
+  float ${prefix}9 = ${prefix}az - ${prefix}bx;`;
+
+// Plane distance matching each axis's projection scale.
+const axisPlaneDistance = (pair: number) =>
+  [2, 3, 5, 6].includes(pair) ? "DIAGONAL_PLANE_DISTANCE" : "PLANE_DISTANCE";
 
 const VERTEX_SHADER = `precision highp float;
 in vec2 position;
@@ -143,18 +168,16 @@ uniform highp sampler2D uFrameDepth;
 uniform vec3 uFaceNormal[FACE_COUNT];
 uniform vec3 uFaceU[FACE_COUNT];
 uniform vec3 uFaceV[FACE_COUNT];
-
-const vec4 PLANES[FACE_COUNT] = vec4[FACE_COUNT](
-${FACE_NORMALS.map(
-  (normal) => `  vec4(${normal.map(glslFloat).join(", ")}, 1.239660977)`,
-).join(",\n")}
-);
+uniform vec4 uPairAxis[10];
+uniform ivec2 uPairFaces[10];
 
 const float LIGHT_CORE_RADIUS = 0.014;
 const float MIRROR_EDGE_INSET = 0.043;
 const float BOUNDING_RADIUS_SQUARED = 2.5921;
 
 const float FACE_PLANE_DISTANCE = ${FACE_PLANE_DISTANCE.toFixed(12)};
+const float PLANE_DISTANCE = 1.239660977;
+const float DIAGONAL_PLANE_DISTANCE = 1.239660977 / 0.577350269;
 const float FACE_EDGE_INRADIUS = ${FACE_EDGE_INRADIUS.toFixed(12)};
 const float FACE_EDGE_HALF_LENGTH = ${LIGHT_BAR_HALF_LENGTH.toFixed(12)};
 const float SQRT_THREE_OVER_TWO = 0.866025403784;
@@ -202,11 +225,8 @@ vec2 faceRayDistance(
   // A sum of squares stays stable when a ray nearly parallels a light bar.
   vec3 denominator = acrossDirection * acrossDirection +
     vec3(direction.z * direction.z);
-  // Sum-of-squares denominators are nonnegative. Substitute one only at zero.
-  vec3 safeDenominator = max(
-    denominator,
-    step(denominator, vec3(0.0))
-  );
+  // A zero sum of squares has a zero numerator; the floor only avoids 0 / 0.
+  vec3 safeDenominator = max(denominator, vec3(1e-30));
   vec3 projectedSeparation = acrossDirection * across +
     vec3(direction.z * point.z);
   vec3 rayAlong = clamp(
@@ -295,52 +315,47 @@ bool intersectIcosahedron(
   vec3 ro,
   vec3 rd,
   out float nearT,
-  out float farT,
-  out int nearFace,
-  out int farFace
+  out int nearFace
 ) {
-  nearT = -FAR;
-  farT = FAR;
-  nearFace = 0;
-  farFace = 0;
+${axisProjections("rd", "s")}
+${axisProjections("ro", "q")}
 
+  // Slab entry and exit distances carry the pair index in their low mantissa
+  // bits; nonnegative floats order like unsigned integers. Integers default
+  // to mediump, which can be 16 bits, so the packed values are highp.
+  highp uint entry = 0u;
+  highp uint exit = 0xffffffffu;
   ${OPPOSITE_FACE_PAIRS.map(
-    ([positiveFace], pairIndex) => `
-  float d${pairIndex} = dot(PLANES[${positiveFace}].xyz, rd);
-  float p${pairIndex} = dot(PLANES[${positiveFace}].xyz, ro);`,
-  ).join("\n")}
-  ${OPPOSITE_FACE_PAIRS.flatMap(
-    ([positiveFace, negativeFace], pairIndex) => [
-      { face: positiveFace, pairIndex, sign: "" },
-      { face: negativeFace, pairIndex, sign: "-" },
-    ],
-  )
-    .sort((a, b) => a.face - b.face)
-    .map(
-      ({ face, pairIndex, sign }) => `{
-    float originSide = PLANES[${face}].w - (${sign}p${pairIndex});
-    float directionSide = ${sign}d${pairIndex};
-
-    if (abs(directionSide) < 0.00001) {
-      if (originSide < 0.0) return false;
-    } else if (directionSide < 0.0) {
-      float numerator = -originSide;
-      float denominator = -directionSide;
-      if (numerator > nearT * denominator) {
-        nearT = numerator / denominator;
-        nearFace = ${face};
-      }
-    } else {
-      if (originSide < farT * directionSide) {
-        farT = originSide / directionSide;
-        farFace = ${face};
-      }
-    }
+    (_, pair) => `{
+    float outgoing = uintBitsToFloat(
+      (floatBitsToUint(s${pair}) & 0x80000000u) |
+      floatBitsToUint(${axisPlaneDistance(pair)})
+    );
+    float inverse = 1.0 / s${pair};
+    float slabEntry = max((-outgoing - q${pair}) * inverse, 0.0);
+    float slabExit = max((outgoing - q${pair}) * inverse, 0.0);
+    entry = max(entry, (floatBitsToUint(slabEntry) & ~15u) | ${pair}u);
+    exit = min(exit, (floatBitsToUint(slabExit) & ~15u) | ${pair}u);
   }`,
-    )
-    .join("\n")}
+  ).join("\n  ")}
 
-  return nearT <= farT && farT > 0.0;
+  nearT = FAR;
+  nearFace = 0;
+  // A zero entry distance would mean the camera is inside the icosahedron.
+  if (entry >= exit || entry < 16u) return false;
+
+  // Recompute the entry face exactly with the original arithmetic.
+  int pair = int(entry & 15u);
+  vec4 axis = uPairAxis[pair];
+  float signedDirection = dot(axis.xyz, rd);
+  bool negativeFace = signedDirection > 0.0;
+  float originProjection = dot(axis.xyz, ro);
+  float originSide = axis.w -
+    (negativeFace ? -originProjection : originProjection);
+  float directionSide = negativeFace ? -signedDirection : signedDirection;
+  nearT = -originSide / -directionSide;
+  nearFace = negativeFace ? uPairFaces[pair].y : uPairFaces[pair].x;
+  return true;
 }
 
 // The exit distance is exitNumerator / exitDenominator. They are also the
@@ -352,36 +367,37 @@ float intersectInterior(
   out float exitNumerator,
   out float exitDenominator
 ) {
+${axisProjections("rd", "s")}
+${axisProjections("ro", "q")}
+  // Each pair's exit distance through its outgoing face, less the original
+  // 0.0002 minimum, carries the pair index in its low mantissa bits. An
+  // unsigned minimum then selects the nearest wall; negative and NaN lose.
+  highp uint best = 0xffffffffu;
+  ${OPPOSITE_FACE_PAIRS.map(
+    (_, pair) => `{
+    float outgoing = uintBitsToFloat(
+      (floatBitsToUint(s${pair}) & 0x80000000u) |
+      floatBitsToUint(${axisPlaneDistance(pair)})
+    );
+    float t = (outgoing - q${pair}) / s${pair} - 0.0002;
+    best = min(best, (floatBitsToUint(t) & ~15u) | ${pair}u);
+  }`,
+  ).join("\n  ")}
+
   faceIndex = 0;
   exitNumerator = FAR;
   exitDenominator = 1.0;
+  if (best >= 0x7f800000u) return FAR;
 
-  // Opposite faces share a projection; only the outward-facing one can
-  // be the exit. Keep the original intersection thresholds and arithmetic.
-  ${OPPOSITE_FACE_PAIRS.map(
-      ([positiveFace, negativeFace]) => `{
-    vec3 axis = PLANES[${positiveFace}].xyz;
-    float signedDenominator = dot(axis, rd);
-    float denominator = abs(signedDenominator);
-    if (denominator > 0.00001) {
-      bool positive = signedDenominator > 0.0;
-      float originProjection = dot(axis, ro);
-      float numerator = PLANES[${positiveFace}].w -
-        (positive ? originProjection : -originProjection);
-      // Compare fractions directly; divide once for the winning face.
-      if (
-        numerator > 0.0002 * denominator &&
-        numerator * exitDenominator < exitNumerator * denominator
-      ) {
-        exitNumerator = numerator;
-        exitDenominator = denominator;
-        faceIndex = positive ? ${positiveFace} : ${negativeFace};
-      }
-    }
-  }`,
-    )
-    .join("\n")}
-
+  // Recompute the winning wall exactly with the original arithmetic.
+  int pair = int(best & 15u);
+  vec4 axis = uPairAxis[pair];
+  float signedDenominator = dot(axis.xyz, rd);
+  bool positive = signedDenominator > 0.0;
+  float originProjection = dot(axis.xyz, ro);
+  exitNumerator = axis.w - (positive ? originProjection : -originProjection);
+  exitDenominator = abs(signedDenominator);
+  faceIndex = positive ? uPairFaces[pair].x : uPairFaces[pair].y;
   return exitNumerator / exitDenominator;
 }
 
@@ -564,22 +580,14 @@ void main() {
 
   vec3 color;
   float nearT = FAR;
-  float farT = FAR;
   int nearFace = 0;
-  int farFace = 0;
   bool glassHit = false;
   float sceneDepth = 1.0;
   float pageShadow = 1.0;
 
   if (intersectsBoundingSphere(ro, rd)) {
-    glassHit = intersectIcosahedron(
-      ro,
-      rd,
-      nearT,
-      farT,
-      nearFace,
-      farFace
-    ) && nearT > 0.0;
+    glassHit = intersectIcosahedron(ro, rd, nearT, nearFace) &&
+      nearT > 0.0;
   }
 
   // Resolve the original strict LessDepth frame test before tracing mirrors.
@@ -649,14 +657,15 @@ void main() {
     color = vec3(0.0);
   }
 
-  float vignette = dot(vUv - 0.5, vUv - 0.5);
-  color *= 1.0 - vignette * 0.56;
-  float grain =
-    hash21(gl_FragCoord.xy + fract(uTime) * 719.31) - 0.5;
-  color += grain * 0.0045;
-  color = acesToneMap(color * 0.98);
-  color = pow(color, vec3(0.4545));
-  if (!glassHit) {
+  if (glassHit) {
+    float vignette = dot(vUv - 0.5, vUv - 0.5);
+    color *= 1.0 - vignette * 0.56;
+    float grain =
+      hash21(gl_FragCoord.xy + fract(uTime) * 719.31) - 0.5;
+    color += grain * 0.0045;
+    color = acesToneMap(color * 0.98);
+    color = pow(color, vec3(0.4545));
+  } else {
     // Match the website's dark-mode page background (#141414).
     const float pageLevel = 0.0784314;
     float shadowLevel = pageLevel * pageShadow;
@@ -1479,6 +1488,17 @@ export default function MirrorChamber() {
           uFaceNormal: { value: new Float32Array(FACE_NORMALS.flat()) },
           uFaceU: { value: new Float32Array(FACE_U_AXES.flat()) },
           uFaceV: { value: new Float32Array(FACE_V_AXES.flat()) },
+          uPairAxis: {
+            value: new Float32Array(
+              OPPOSITE_FACE_PAIRS.flatMap(([face]) => [
+                ...FACE_NORMALS[face],
+                1.239660977,
+              ]),
+            ),
+          },
+          uPairFaces: {
+            value: new Int32Array(OPPOSITE_FACE_PAIRS.flat()),
+          },
           uFrameColor: { value: null },
           uFrameDepth: { value: null },
         },
