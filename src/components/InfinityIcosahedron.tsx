@@ -23,6 +23,21 @@ const DRAG_RADIANS_ACROSS_SHAPE = Math.PI * 0.75;
 const MIN_ZOOM = 1.72;
 const MAX_ZOOM = 40;
 
+// Each pair contains the indices of two opposite icosahedron faces.
+// Primary entry tests retain ascending face order to preserve boundary ties.
+const OPPOSITE_FACE_PAIRS = [
+  [0, 9],
+  [1, 8],
+  [2, 14],
+  [3, 13],
+  [4, 15],
+  [5, 11],
+  [6, 10],
+  [7, 12],
+  [16, 19],
+  [17, 18],
+] as const;
+
 const VERTEX_SHADER = `precision highp float;
 in vec2 position;
 out vec2 vUv;
@@ -42,6 +57,8 @@ uniform float uTime;
 uniform mat3 uRotation;
 uniform float uZoom;
 uniform vec4 uBounceLighting[${MIRROR_BOUNCES}];
+uniform highp sampler2D uFrameColor;
+uniform highp sampler2D uFrameDepth;
 
 #define FACE_COUNT 20
 #define MIRROR_BOUNCES ${MIRROR_BOUNCES}
@@ -170,10 +187,10 @@ vec2 faceRayDistance(
   // A sum of squares stays stable when a ray nearly parallels a light bar.
   vec3 denominator = acrossDirection * acrossDirection +
     vec3(direction.z * direction.z);
-  vec3 safeDenominator = mix(
+  // Sum-of-squares denominators are nonnegative. Substitute one only at zero.
+  vec3 safeDenominator = max(
     denominator,
-    vec3(1.0),
-    equal(denominator, vec3(0.0))
+    step(denominator, vec3(0.0))
   );
   vec3 projectedSeparation = acrossDirection * across +
     vec3(direction.z * point.z);
@@ -269,10 +286,22 @@ bool intersectIcosahedron(
   nearFace = 0;
   farFace = 0;
 
-  for (int i = 0; i < FACE_COUNT; i++) {
-    vec3 normal = PLANES[i].xyz;
-    float originSide = PLANES[i].w - dot(normal, ro);
-    float directionSide = dot(normal, rd);
+  ${OPPOSITE_FACE_PAIRS.map(
+    ([positiveFace], pairIndex) => `
+  float d${pairIndex} = dot(PLANES[${positiveFace}].xyz, rd);
+  float p${pairIndex} = dot(PLANES[${positiveFace}].xyz, ro);`,
+  ).join("\n")}
+  ${OPPOSITE_FACE_PAIRS.flatMap(
+    ([positiveFace, negativeFace], pairIndex) => [
+      { face: positiveFace, pairIndex, sign: "" },
+      { face: negativeFace, pairIndex, sign: "-" },
+    ],
+  )
+    .sort((a, b) => a.face - b.face)
+    .map(
+      ({ face, pairIndex, sign }) => `{
+    float originSide = PLANES[${face}].w - (${sign}p${pairIndex});
+    float directionSide = ${sign}d${pairIndex};
 
     if (abs(directionSide) < 0.00001) {
       if (originSide < 0.0) return false;
@@ -281,15 +310,17 @@ bool intersectIcosahedron(
       float denominator = -directionSide;
       if (numerator > nearT * denominator) {
         nearT = numerator / denominator;
-        nearFace = i;
+        nearFace = ${face};
       }
     } else {
       if (originSide < farT * directionSide) {
         farT = originSide / directionSide;
-        farFace = i;
+        farFace = ${face};
       }
     }
-  }
+  }`,
+    )
+    .join("\n")}
 
   return nearT <= farT && farT > 0.0;
 }
@@ -306,19 +337,7 @@ float intersectInterior(
 
   // Opposite faces share a projection; only the outward-facing one can
   // be the exit. Keep the original intersection thresholds and arithmetic.
-  ${[
-    [0, 9],
-    [1, 8],
-    [2, 14],
-    [3, 13],
-    [4, 15],
-    [5, 11],
-    [6, 10],
-    [7, 12],
-    [16, 19],
-    [17, 18],
-  ]
-    .map(
+  ${OPPOSITE_FACE_PAIRS.map(
       ([positiveFace, negativeFace]) => `{
     vec3 axis = PLANES[${positiveFace}].xyz;
     float signedDenominator = dot(axis, rd);
@@ -514,6 +533,27 @@ void main() {
     ) && nearT > 0.0;
   }
 
+  // Resolve the original strict LessDepth frame test before tracing mirrors.
+  // The frame attachment is separate from this scene's destination attachment.
+  if (glassHit) {
+    const float depthNear = 0.1;
+    const float depthFar = FAR;
+    float cameraZ = worldRd.z * (nearT + 0.035);
+    float depthA =
+      (depthFar + depthNear) / (depthNear - depthFar);
+    float depthB =
+      (2.0 * depthFar * depthNear) /
+      (depthNear - depthFar);
+    sceneDepth =
+      (depthA * cameraZ + depthB) / (-cameraZ) * 0.5 + 0.5;
+  }
+  ivec2 framePixel = ivec2(gl_FragCoord.xy);
+  float frameDepth = texelFetch(uFrameDepth, framePixel, 0).r;
+  if (frameDepth < clamp(sceneDepth, 0.0, 1.0)) {
+    outColor = texelFetch(uFrameColor, framePixel, 0);
+    return;
+  }
+
   if (glassHit) {
     vec3 frontNormal = PLANES[nearFace].xyz;
     vec3 frontHit = ro + rd * nearT;
@@ -555,17 +595,6 @@ void main() {
       (0.48 * mirrorCoverage);
     color += vec3(0.018, 0.020, 0.021) *
       ((1.0 - facing) * 0.34 * mirrorCoverage);
-
-    const float depthNear = 0.1;
-    const float depthFar = FAR;
-    float cameraZ = worldRd.z * (nearT + 0.035);
-    float depthA =
-      (depthFar + depthNear) / (depthNear - depthFar);
-    float depthB =
-      (2.0 * depthFar * depthNear) /
-      (depthNear - depthFar);
-    sceneDepth =
-      (depthA * cameraZ + depthB) / (-cameraZ) * 0.5 + 0.5;
   } else {
     pageShadow = backgroundShadow(worldRo, worldRd);
     color = vec3(0.0);
@@ -597,7 +626,6 @@ void main() {
     );
   }
   outColor = vec4(color, 1.0);
-  gl_FragDepth = sceneDepth;
 }`;
 
 const FRAME_VERTEX_SHADER = `precision highp float;
@@ -1387,10 +1415,11 @@ export default function MirrorChamber() {
           uRotation: { value: sceneRotation },
           uZoom: { value: SQUARE_VIEWPORT_DEFAULT_ZOOM },
           uBounceLighting: { value: BOUNCE_LIGHTING },
+          uFrameColor: { value: null },
+          uFrameDepth: { value: null },
         },
-        depthTest: true,
-        depthWrite: true,
-        depthFunc: THREE.AlwaysDepth,
+        depthTest: false,
+        depthWrite: false,
         blending: THREE.NoBlending,
         toneMapped: false,
       });
@@ -1464,12 +1493,29 @@ export default function MirrorChamber() {
         magFilter: THREE.LinearFilter,
         format: THREE.RGBAFormat,
         type: THREE.UnsignedByteType,
-        depthBuffer: true,
+        depthBuffer: false,
         stencilBuffer: false,
       });
       renderTarget.texture.generateMipmaps = false;
       renderTarget.texture.colorSpace = THREE.NoColorSpace;
       postMaterial.uniforms.uScene.value = renderTarget.texture;
+
+      // UnsignedIntType selects DEPTH_COMPONENT24, matching the original target.
+      const frameTarget = new THREE.WebGLRenderTarget(1, 1, {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        format: THREE.RGBAFormat,
+        type: THREE.UnsignedByteType,
+        depthBuffer: true,
+        stencilBuffer: false,
+        depthTexture: new THREE.DepthTexture(1, 1, THREE.UnsignedIntType),
+      });
+      frameTarget.texture.generateMipmaps = false;
+      frameTarget.texture.colorSpace = THREE.NoColorSpace;
+      frameTarget.depthTexture!.minFilter = THREE.NearestFilter;
+      frameTarget.depthTexture!.magFilter = THREE.NearestFilter;
+      sceneMaterial.uniforms.uFrameColor.value = frameTarget.texture;
+      sceneMaterial.uniforms.uFrameDepth.value = frameTarget.depthTexture;
 
       const getDefaultZoom = () =>
         SQUARE_VIEWPORT_DEFAULT_ZOOM *
@@ -1499,6 +1545,7 @@ export default function MirrorChamber() {
         renderHeight = height;
         activeRenderer.setSize(width, height, false);
         renderTarget.setSize(width, height);
+        frameTarget.setSize(width, height);
         sceneResolution.set(width, height);
         frameResolution.set(width, height);
         postTexel.set(1 / width, 1 / height);
@@ -1572,10 +1619,13 @@ export default function MirrorChamber() {
         frameMaterial.uniforms.uZoom.value = controls.zoom;
         postMaterial.uniforms.uZoom.value = controls.zoom;
 
-        activeRenderer.setRenderTarget(renderTarget);
+        activeRenderer.setRenderTarget(frameTarget);
         activeRenderer.clear(true, true, false);
-        activeRenderer.render(scenePass, camera);
         activeRenderer.render(framePass, camera);
+
+        activeRenderer.setRenderTarget(renderTarget);
+        activeRenderer.clear(true, false, false);
+        activeRenderer.render(scenePass, camera);
 
         activeRenderer.setRenderTarget(null);
         activeRenderer.render(postPass, camera);
@@ -1843,6 +1893,7 @@ export default function MirrorChamber() {
         fullscreenGeometry.dispose();
         frameGeometry.dispose();
         renderTarget.dispose();
+        frameTarget.dispose();
         activeRenderer.dispose();
       };
     } catch (caught) {
