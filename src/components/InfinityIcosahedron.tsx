@@ -38,6 +38,79 @@ const OPPOSITE_FACE_PAIRS = [
   [17, 18],
 ] as const;
 
+// Outward unit normals of the icosahedron faces.
+const FACE_NORMALS: readonly Point[] = [
+  [0.0, 0.934172359, 0.356822090],
+  [0.0, 0.934172359, -0.356822090],
+  [-0.577350269, 0.577350269, 0.577350269],
+  [-0.577350269, 0.577350269, -0.577350269],
+  [-0.934172359, 0.356822090, 0.0],
+  [0.577350269, 0.577350269, 0.577350269],
+  [0.577350269, 0.577350269, -0.577350269],
+  [0.934172359, 0.356822090, 0.0],
+  [0.0, -0.934172359, 0.356822090],
+  [0.0, -0.934172359, -0.356822090],
+  [-0.577350269, -0.577350269, 0.577350269],
+  [-0.577350269, -0.577350269, -0.577350269],
+  [-0.934172359, -0.356822090, 0.0],
+  [0.577350269, -0.577350269, 0.577350269],
+  [0.577350269, -0.577350269, -0.577350269],
+  [0.934172359, -0.356822090, 0.0],
+  [0.356822090, 0.0, 0.934172359],
+  [-0.356822090, 0.0, 0.934172359],
+  [0.356822090, 0.0, -0.934172359],
+  [-0.356822090, 0.0, -0.934172359],
+];
+
+// Orthonormal bases map every face to the same equilateral triangle.
+const FACE_U_AXES: readonly Point[] = [
+  [-0.866025403784, 0.178411044887, -0.467086179481],
+  [-0.866025403784, 0.178411044887, 0.467086179481],
+  [-0.110264089708, 0.645497224368, -0.755761314076],
+  [-0.110264089708, 0.645497224368, 0.755761314076],
+  [0.356822089773, 0.934172358963, 0.0],
+  [0.110264089708, 0.645497224368, -0.755761314076],
+  [0.110264089708, 0.645497224368, 0.755761314076],
+  [-0.356822089773, 0.934172358963, 0.0],
+  [-0.866025403784, -0.178411044887, -0.467086179481],
+  [-0.866025403784, -0.178411044887, 0.467086179481],
+  [-0.110264089708, -0.645497224368, -0.755761314076],
+  [-0.110264089708, -0.645497224368, 0.755761314076],
+  [0.356822089773, -0.934172358963, 0.0],
+  [0.110264089708, -0.645497224368, -0.755761314076],
+  [0.110264089708, -0.645497224368, 0.755761314076],
+  [-0.356822089773, -0.934172358963, 0.0],
+  [-0.467086179481, -0.866025403784, 0.178411044887],
+  [0.467086179481, -0.866025403784, 0.178411044887],
+  [-0.467086179481, -0.866025403784, -0.178411044887],
+  [0.467086179481, -0.866025403784, -0.178411044887],
+];
+const FACE_V_AXES: readonly Point[] = [
+  [-0.500000000000, -0.309016994375, 0.809016994375],
+  [0.500000000000, 0.309016994375, 0.809016994375],
+  [-0.809016994375, -0.500000000000, -0.309016994375],
+  [0.809016994375, 0.500000000000, -0.309016994375],
+  [0.0, 0.0, -1.000000000000],
+  [-0.809016994375, 0.500000000000, 0.309016994375],
+  [0.809016994375, -0.500000000000, 0.309016994375],
+  [0.0, 0.0, 1.000000000000],
+  [0.500000000000, -0.309016994375, -0.809016994375],
+  [-0.500000000000, 0.309016994375, -0.809016994375],
+  [0.809016994375, -0.500000000000, 0.309016994375],
+  [-0.809016994375, 0.500000000000, 0.309016994375],
+  [0.0, 0.0, 1.000000000000],
+  [0.809016994375, 0.500000000000, -0.309016994375],
+  [-0.809016994375, -0.500000000000, -0.309016994375],
+  [0.0, 0.0, -1.000000000000],
+  [0.809016994375, -0.500000000000, -0.309016994375],
+  [0.809016994375, 0.500000000000, 0.309016994375],
+  [-0.809016994375, 0.500000000000, -0.309016994375],
+  [-0.809016994375, -0.500000000000, 0.309016994375],
+];
+
+const glslFloat = (value: number) =>
+  Number.isInteger(value) ? value.toFixed(1) : String(value);
+
 const VERTEX_SHADER = `precision highp float;
 in vec2 position;
 out vec2 vUv;
@@ -57,6 +130,7 @@ uniform float uTime;
 uniform mat3 uRotation;
 uniform float uZoom;
 uniform vec4 uBounceLighting[${MIRROR_BOUNCES}];
+uniform vec3 uBounceTint[${MIRROR_BOUNCES}];
 uniform highp sampler2D uFrameColor;
 uniform highp sampler2D uFrameDepth;
 
@@ -64,78 +138,22 @@ uniform highp sampler2D uFrameDepth;
 #define MIRROR_BOUNCES ${MIRROR_BOUNCES}
 #define FAR 100.0
 
+// Dynamically indexed tables live in uniforms. As constant arrays, drivers
+// can copy them into per-pixel local memory.
+uniform vec3 uFaceNormal[FACE_COUNT];
+uniform vec3 uFaceU[FACE_COUNT];
+uniform vec3 uFaceV[FACE_COUNT];
+
 const vec4 PLANES[FACE_COUNT] = vec4[FACE_COUNT](
-  vec4(0.0, 0.934172359, 0.356822090, 1.239660977),
-  vec4(0.0, 0.934172359, -0.356822090, 1.239660977),
-  vec4(-0.577350269, 0.577350269, 0.577350269, 1.239660977),
-  vec4(-0.577350269, 0.577350269, -0.577350269, 1.239660977),
-  vec4(-0.934172359, 0.356822090, 0.0, 1.239660977),
-  vec4(0.577350269, 0.577350269, 0.577350269, 1.239660977),
-  vec4(0.577350269, 0.577350269, -0.577350269, 1.239660977),
-  vec4(0.934172359, 0.356822090, 0.0, 1.239660977),
-  vec4(0.0, -0.934172359, 0.356822090, 1.239660977),
-  vec4(0.0, -0.934172359, -0.356822090, 1.239660977),
-  vec4(-0.577350269, -0.577350269, 0.577350269, 1.239660977),
-  vec4(-0.577350269, -0.577350269, -0.577350269, 1.239660977),
-  vec4(-0.934172359, -0.356822090, 0.0, 1.239660977),
-  vec4(0.577350269, -0.577350269, 0.577350269, 1.239660977),
-  vec4(0.577350269, -0.577350269, -0.577350269, 1.239660977),
-  vec4(0.934172359, -0.356822090, 0.0, 1.239660977),
-  vec4(0.356822090, 0.0, 0.934172359, 1.239660977),
-  vec4(-0.356822090, 0.0, 0.934172359, 1.239660977),
-  vec4(0.356822090, 0.0, -0.934172359, 1.239660977),
-  vec4(-0.356822090, 0.0, -0.934172359, 1.239660977)
+${FACE_NORMALS.map(
+  (normal) => `  vec4(${normal.map(glslFloat).join(", ")}, 1.239660977)`,
+).join(",\n")}
 );
 
 const float LIGHT_CORE_RADIUS = 0.014;
 const float MIRROR_EDGE_INSET = 0.043;
 const float BOUNDING_RADIUS_SQUARED = 2.5921;
 
-// Orthonormal bases map every face to the same equilateral triangle.
-const vec3 FACE_U[20] = vec3[20](
-  vec3(-0.866025403784, 0.178411044887, -0.467086179481),
-  vec3(-0.866025403784, 0.178411044887, 0.467086179481),
-  vec3(-0.110264089708, 0.645497224368, -0.755761314076),
-  vec3(-0.110264089708, 0.645497224368, 0.755761314076),
-  vec3(0.356822089773, 0.934172358963, 0.000000000000),
-  vec3(0.110264089708, 0.645497224368, -0.755761314076),
-  vec3(0.110264089708, 0.645497224368, 0.755761314076),
-  vec3(-0.356822089773, 0.934172358963, 0.000000000000),
-  vec3(-0.866025403784, -0.178411044887, -0.467086179481),
-  vec3(-0.866025403784, -0.178411044887, 0.467086179481),
-  vec3(-0.110264089708, -0.645497224368, -0.755761314076),
-  vec3(-0.110264089708, -0.645497224368, 0.755761314076),
-  vec3(0.356822089773, -0.934172358963, 0.000000000000),
-  vec3(0.110264089708, -0.645497224368, -0.755761314076),
-  vec3(0.110264089708, -0.645497224368, 0.755761314076),
-  vec3(-0.356822089773, -0.934172358963, 0.000000000000),
-  vec3(-0.467086179481, -0.866025403784, 0.178411044887),
-  vec3(0.467086179481, -0.866025403784, 0.178411044887),
-  vec3(-0.467086179481, -0.866025403784, -0.178411044887),
-  vec3(0.467086179481, -0.866025403784, -0.178411044887)
-);
-const vec3 FACE_V[20] = vec3[20](
-  vec3(-0.500000000000, -0.309016994375, 0.809016994375),
-  vec3(0.500000000000, 0.309016994375, 0.809016994375),
-  vec3(-0.809016994375, -0.500000000000, -0.309016994375),
-  vec3(0.809016994375, 0.500000000000, -0.309016994375),
-  vec3(0.000000000000, 0.000000000000, -1.000000000000),
-  vec3(-0.809016994375, 0.500000000000, 0.309016994375),
-  vec3(0.809016994375, -0.500000000000, 0.309016994375),
-  vec3(0.000000000000, 0.000000000000, 1.000000000000),
-  vec3(0.500000000000, -0.309016994375, -0.809016994375),
-  vec3(-0.500000000000, 0.309016994375, -0.809016994375),
-  vec3(0.809016994375, -0.500000000000, 0.309016994375),
-  vec3(-0.809016994375, 0.500000000000, 0.309016994375),
-  vec3(0.000000000000, 0.000000000000, 1.000000000000),
-  vec3(0.809016994375, 0.500000000000, -0.309016994375),
-  vec3(-0.809016994375, -0.500000000000, -0.309016994375),
-  vec3(0.000000000000, 0.000000000000, -1.000000000000),
-  vec3(0.809016994375, -0.500000000000, -0.309016994375),
-  vec3(0.809016994375, 0.500000000000, 0.309016994375),
-  vec3(-0.809016994375, 0.500000000000, -0.309016994375),
-  vec3(-0.809016994375, -0.500000000000, 0.309016994375)
-);
 const float FACE_PLANE_DISTANCE = ${FACE_PLANE_DISTANCE.toFixed(12)};
 const float FACE_EDGE_INRADIUS = ${FACE_EDGE_INRADIUS.toFixed(12)};
 const float FACE_EDGE_HALF_LENGTH = ${LIGHT_BAR_HALF_LENGTH.toFixed(12)};
@@ -143,17 +161,17 @@ const float SQRT_THREE_OVER_TWO = 0.866025403784;
 
 vec3 faceLocalPoint(vec3 point, int face) {
   return vec3(
-    dot(point, FACE_U[face]),
-    dot(point, FACE_V[face]),
-    dot(point, PLANES[face].xyz) - FACE_PLANE_DISTANCE
+    dot(point, uFaceU[face]),
+    dot(point, uFaceV[face]),
+    dot(point, uFaceNormal[face]) - FACE_PLANE_DISTANCE
   );
 }
 
 vec3 faceLocalDirection(vec3 direction, int face) {
   return vec3(
-    dot(direction, FACE_U[face]),
-    dot(direction, FACE_V[face]),
-    dot(direction, PLANES[face].xyz)
+    dot(direction, uFaceU[face]),
+    dot(direction, uFaceV[face]),
+    dot(direction, uFaceNormal[face])
   );
 }
 
@@ -174,13 +192,10 @@ vec3 faceEdgeAlong(vec2 point) {
 }
 
 vec2 faceRayDistance(
-  vec3 rayOrigin,
-  vec3 rayDirection,
-  float rayLength,
-  int face
+  vec3 point,
+  vec3 direction,
+  float rayLength
 ) {
-  vec3 point = faceLocalPoint(rayOrigin, face);
-  vec3 direction = faceLocalDirection(rayDirection, face);
   vec3 across = faceEdgeAcross(point.xy) - FACE_EDGE_INRADIUS;
   vec3 acrossDirection = faceEdgeAcross(direction.xy);
   vec3 alongDirection = faceEdgeAlong(direction.xy);
@@ -263,14 +278,17 @@ bool intersectsBoundingSphere(vec3 ro, vec3 rd) {
     (towardCenter < 0.0 || originDistanceSquared <= 0.0);
 }
 
-float faceEdgeDistance(vec3 point, int faceIndex) {
-  vec3 localPoint = faceLocalPoint(point, faceIndex);
+float faceLocalEdgeDistance(vec3 localPoint) {
   vec3 across = faceEdgeAcross(localPoint.xy) - FACE_EDGE_INRADIUS;
   vec3 squared = across * across;
   return sqrt(
     min(squared.x, min(squared.y, squared.z)) +
     localPoint.z * localPoint.z
   );
+}
+
+float faceEdgeDistance(vec3 point, int faceIndex) {
+  return faceLocalEdgeDistance(faceLocalPoint(point, faceIndex));
 }
 
 bool intersectIcosahedron(
@@ -325,15 +343,18 @@ bool intersectIcosahedron(
   return nearT <= farT && farT > 0.0;
 }
 
+// The exit distance is exitNumerator / exitDenominator. They are also the
+// exit face's local normal offset and outgoing direction component.
 float intersectInterior(
   vec3 ro,
   vec3 rd,
-  out vec3 normal,
-  out int faceIndex
+  out int faceIndex,
+  out float exitNumerator,
+  out float exitDenominator
 ) {
-  float nearest = FAR;
-  normal = vec3(0.0, 0.0, 1.0);
   faceIndex = 0;
+  exitNumerator = FAR;
+  exitDenominator = 1.0;
 
   // Opposite faces share a projection; only the outward-facing one can
   // be the exit. Keep the original intersection thresholds and arithmetic.
@@ -347,9 +368,13 @@ float intersectInterior(
       float originProjection = dot(axis, ro);
       float numerator = PLANES[${positiveFace}].w -
         (positive ? originProjection : -originProjection);
-      if (numerator > 0.0002 * denominator && numerator < nearest * denominator) {
-        nearest = numerator / denominator;
-        normal = positive ? axis : -axis;
+      // Compare fractions directly; divide once for the winning face.
+      if (
+        numerator > 0.0002 * denominator &&
+        numerator * exitDenominator < exitNumerator * denominator
+      ) {
+        exitNumerator = numerator;
+        exitDenominator = denominator;
         faceIndex = positive ? ${positiveFace} : ${negativeFace};
       }
     }
@@ -357,7 +382,7 @@ float intersectInterior(
     )
     .join("\n")}
 
-  return nearest;
+  return exitNumerator / exitDenominator;
 }
 
 vec3 studioEnvironment(vec3 direction) {
@@ -409,18 +434,42 @@ float backgroundShadow(vec3 ro, vec3 rd) {
 
 vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
   vec3 radiance = vec3(0.0);
-  vec3 throughput = vec3(1.0);
-  float entryEdgeDistance = faceEdgeDistance(ro, entryFace);
+  // Scalar reflectivity; the per-bounce mirror tint comes from uBounceTint.
+  float throughput = 1.0;
+  // Face-local coordinates carry across bounces: a mirror reflection keeps
+  // the in-plane components and negates the normal component.
+  vec3 entryPoint = faceLocalPoint(ro, entryFace);
+  vec3 entryDirection = faceLocalDirection(rd, entryFace);
+  bool entersThroughInset =
+    faceLocalEdgeDistance(entryPoint) < MIRROR_EDGE_INSET;
 
   for (int bounce = 0; bounce < MIRROR_BOUNCES; bounce++) {
 
-    vec3 faceNormal;
     int faceIndex;
-    float wallT = intersectInterior(ro, rd, faceNormal, faceIndex);
+    float exitNumerator;
+    float exitDenominator;
+    float wallT = intersectInterior(
+      ro,
+      rd,
+      faceIndex,
+      exitNumerator,
+      exitDenominator
+    );
     if (wallT >= FAR - 1.0) break;
 
-    vec2 entryCandidate = faceRayDistance(ro, rd, wallT, entryFace);
-    vec2 exitCandidate = faceRayDistance(ro, rd, wallT, faceIndex);
+    // The wall intersection already projected the ray onto the exit normal.
+    vec3 exitPoint = vec3(
+      dot(ro, uFaceU[faceIndex]),
+      dot(ro, uFaceV[faceIndex]),
+      -exitNumerator
+    );
+    vec3 exitDirection = vec3(
+      dot(rd, uFaceU[faceIndex]),
+      dot(rd, uFaceV[faceIndex]),
+      exitDenominator
+    );
+    vec2 entryCandidate = faceRayDistance(entryPoint, entryDirection, wallT);
+    vec2 exitCandidate = faceRayDistance(exitPoint, exitDirection, wallT);
     vec2 closest = exitCandidate.x < entryCandidate.x
       ? exitCandidate
       : entryCandidate;
@@ -428,11 +477,13 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
     float nearestAlong = closest.y;
     float nearestBar = sqrt(nearestBarSquared);
     vec4 bounceLighting = uBounceLighting[bounce];
+    vec3 bounceTint = uBounceTint[bounce];
     vec3 barColor = bounceLighting.rgb;
     float depthLoss = bounceLighting.a;
     // Combine glow and air attenuation into one exponential per bounce.
     float glow = exp(-nearestBar * 42.0 - nearestAlong * 0.035);
-    radiance += throughput * depthLoss * barColor * glow * 0.018;
+    radiance += throughput * depthLoss * bounceTint * barColor *
+      glow * 0.018;
 
     if (nearestBar < LIGHT_CORE_RADIUS) {
       float airLoss = exp(-nearestAlong * 0.035);
@@ -445,20 +496,15 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
           (LIGHT_CORE_RADIUS * LIGHT_CORE_RADIUS)
       ));
       vec3 tubeColor = mix(barColor, vec3(1.0), diffuser * 0.34);
-      radiance += throughput * depthLoss * airLoss *
+      radiance += throughput * depthLoss * airLoss * bounceTint *
         tubeColor * (0.72 + roundProfile * 1.05);
       break;
     }
 
-    if (
-      bounce == 0 &&
-      entryEdgeDistance < MIRROR_EDGE_INSET
-    ) {
-      break;
-    }
+    if (bounce == 0 && entersThroughInset) break;
 
-    vec3 hit = ro + rd * wallT;
-    float edgeDistance = faceEdgeDistance(hit, faceIndex);
+    vec3 hitPoint = exitPoint + exitDirection * wallT;
+    float edgeDistance = faceLocalEdgeDistance(hitPoint);
     if (edgeDistance < MIRROR_EDGE_INSET) {
       // The inset is empty space between the light and mirror.
       // It receives no artificial rail or channel surface.
@@ -467,7 +513,7 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
     float seam = exp(-edgeDistance * 85.0);
     float faceVariation =
       0.88 + 0.12 * fract(float(faceIndex) * 0.618033);
-    float grazingBase = 1.0 - abs(dot(faceNormal, -rd));
+    float grazingBase = 1.0 - exitDenominator;
     float grazingSquared = grazingBase * grazingBase;
     float grazing =
       grazingSquared * grazingSquared * grazingBase;
@@ -475,14 +521,17 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
 
     vec3 coating = vec3(0.0045, 0.0052, 0.0062) * faceVariation;
     coating += vec3(0.006, 0.007, 0.008) * seam;
-    radiance += throughput * coating * (1.0 - reflectivity) * 2.0;
+    radiance += throughput * bounceTint * coating *
+      (1.0 - reflectivity) * 2.0;
 
     throughput *= reflectivity;
-    throughput *= vec3(0.965, 0.978, 0.992);
 
+    vec3 hit = ro + rd * wallT;
+    vec3 faceNormal = uFaceNormal[faceIndex];
     rd = reflect(rd, faceNormal);
     ro = hit - faceNormal * 0.0012;
-    entryFace = faceIndex;
+    entryPoint = vec3(hitPoint.xy, hitPoint.z - 0.0012);
+    entryDirection = vec3(exitDirection.xy, -exitDirection.z);
   }
 
   return radiance;
@@ -555,20 +604,19 @@ void main() {
   }
 
   if (glassHit) {
-    vec3 frontNormal = PLANES[nearFace].xyz;
+    vec3 frontNormal = uFaceNormal[nearFace];
     vec3 frontHit = ro + rd * nearT;
     vec3 worldNormal = normalize(objectToWorld * frontNormal);
     vec3 reflectedWorld = reflect(worldRd, worldNormal);
-    vec3 externalReflection = studioEnvironment(reflectedWorld);
-
     float facing = clamp(dot(-rd, frontNormal), 0.0, 1.0);
-    float fresnelBase = 1.0 - facing;
-    float fresnelSquared = fresnelBase * fresnelBase;
-    float fresnelPower =
-      fresnelSquared * fresnelSquared * fresnelBase;
-    float fresnel =
-      0.045 + (1.0 - 0.045) * fresnelPower;
+    float edgeDistance = faceEdgeDistance(frontHit, nearFace);
+    float mirrorCoverage = smoothstep(
+      MIRROR_EDGE_INSET - 0.004,
+      MIRROR_EDGE_INSET,
+      edgeDistance
+    );
 
+    // Finish front-face values before tracing to keep fewer of them live.
     vec3 insideOrigin = frontHit - frontNormal * 0.002;
     vec3 interior = traceMirroredInterior(
       insideOrigin,
@@ -576,18 +624,19 @@ void main() {
       nearFace
     );
 
+    vec3 externalReflection = studioEnvironment(reflectedWorld);
+    float fresnelBase = 1.0 - facing;
+    float fresnelSquared = fresnelBase * fresnelBase;
+    float fresnelPower =
+      fresnelSquared * fresnelSquared * fresnelBase;
+    float fresnel =
+      0.045 + (1.0 - 0.045) * fresnelPower;
     vec3 thinPanelTransmission = vec3(0.988, 0.993, 0.996);
     float coatingReflection = fresnel * 0.70;
     float transmission = (1.0 - fresnel) * 0.96;
     vec3 mirroredPanel =
       interior * thinPanelTransmission * transmission +
       externalReflection * coatingReflection;
-    float edgeDistance = faceEdgeDistance(frontHit, nearFace);
-    float mirrorCoverage = smoothstep(
-      MIRROR_EDGE_INSET - 0.004,
-      MIRROR_EDGE_INSET,
-      edgeDistance
-    );
     color = mix(interior, mirroredPanel, mirrorCoverage);
 
     float silhouette = pow(1.0 - facing, 3.0);
@@ -767,8 +816,13 @@ uniform sampler2D uScene;
 uniform vec2 uTexel;
 uniform float uZoom;
 
-vec3 brightSample(vec2 uv) {
-  vec3 sampleColor = texture(uScene, uv).rgb;
+vec4 fetchSceneTexel(ivec2 pixel) {
+  ivec2 maximum = textureSize(uScene, 0) - ivec2(1);
+  return texelFetch(uScene, clamp(pixel, ivec2(0), maximum), 0);
+}
+
+vec3 brightSample(ivec2 pixel) {
+  vec3 sampleColor = fetchSceneTexel(pixel).rgb;
   float brightness = max(
     sampleColor.r,
     max(sampleColor.g, sampleColor.b)
@@ -781,24 +835,12 @@ float luminance(vec3 color) {
   return dot(color, vec3(0.299, 0.587, 0.114));
 }
 
-vec3 antialiasedScene(vec2 uv) {
-  vec3 center = texture(uScene, uv).rgb;
-  vec3 north = texture(
-    uScene,
-    uv + vec2(0.0, uTexel.y)
-  ).rgb;
-  vec3 south = texture(
-    uScene,
-    uv - vec2(0.0, uTexel.y)
-  ).rgb;
-  vec3 east = texture(
-    uScene,
-    uv + vec2(uTexel.x, 0.0)
-  ).rgb;
-  vec3 west = texture(
-    uScene,
-    uv - vec2(uTexel.x, 0.0)
-  ).rgb;
+vec3 antialiasedScene(ivec2 pixel) {
+  vec3 center = fetchSceneTexel(pixel).rgb;
+  vec3 north = fetchSceneTexel(pixel + ivec2(0, 1)).rgb;
+  vec3 south = fetchSceneTexel(pixel + ivec2(0, -1)).rgb;
+  vec3 east = fetchSceneTexel(pixel + ivec2(1, 0)).rgb;
+  vec3 west = fetchSceneTexel(pixel + ivec2(-1, 0)).rgb;
 
   float centerLuma = luminance(center);
   float northLuma = luminance(north);
@@ -853,9 +895,10 @@ bool canReceiveBloom() {
 }
 
 void main() {
+  ivec2 pixel = ivec2(gl_FragCoord.xy);
   vec2 fromCenter = vUv - 0.5;
   vec2 chromaOffset = fromCenter * 0.00022;
-  vec3 base = antialiasedScene(vUv);
+  vec3 base = antialiasedScene(pixel);
 #if TEXTURE_SAMPLES_PER_PIXEL >= 2
   base.r = mix(
     base.r,
@@ -875,43 +918,43 @@ void main() {
   vec3 halation = vec3(0.0);
   if (canReceiveBloom()) {
 #if TEXTURE_SAMPLES_PER_PIXEL >= 4
-    bloom += brightSample(vUv) * 0.08;
+    bloom += brightSample(pixel) * 0.08;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 5
-    bloom += brightSample(vUv + vec2(uTexel.x * 2.0, 0.0)) * 0.08;
+    bloom += brightSample(pixel + ivec2(2, 0)) * 0.08;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 6
-    bloom += brightSample(vUv - vec2(uTexel.x * 2.0, 0.0)) * 0.08;
+    bloom += brightSample(pixel + ivec2(-2, 0)) * 0.08;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 7
-    bloom += brightSample(vUv + vec2(0.0, uTexel.y * 2.0)) * 0.08;
+    bloom += brightSample(pixel + ivec2(0, 2)) * 0.08;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 8
-    bloom += brightSample(vUv - vec2(0.0, uTexel.y * 2.0)) * 0.08;
+    bloom += brightSample(pixel + ivec2(0, -2)) * 0.08;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 9
-    bloom += brightSample(vUv + uTexel * vec2(4.0, 4.0)) * 0.04;
+    bloom += brightSample(pixel + ivec2(4, 4)) * 0.04;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 10
-    bloom += brightSample(vUv + uTexel * vec2(-4.0, 4.0)) * 0.04;
+    bloom += brightSample(pixel + ivec2(-4, 4)) * 0.04;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 11
-    bloom += brightSample(vUv + uTexel * vec2(4.0, -4.0)) * 0.04;
+    bloom += brightSample(pixel + ivec2(4, -4)) * 0.04;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 12
-    bloom += brightSample(vUv - uTexel * vec2(4.0, 4.0)) * 0.04;
+    bloom += brightSample(pixel + ivec2(-4, -4)) * 0.04;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 13
-    bloom += brightSample(vUv + vec2(uTexel.x * 8.0, 0.0)) * 0.02;
+    bloom += brightSample(pixel + ivec2(8, 0)) * 0.02;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 14
-    bloom += brightSample(vUv - vec2(uTexel.x * 8.0, 0.0)) * 0.02;
+    bloom += brightSample(pixel + ivec2(-8, 0)) * 0.02;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 15
-    bloom += brightSample(vUv + vec2(0.0, uTexel.y * 8.0)) * 0.02;
+    bloom += brightSample(pixel + ivec2(0, 8)) * 0.02;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 16
-    bloom += brightSample(vUv - vec2(0.0, uTexel.y * 8.0)) * 0.02;
+    bloom += brightSample(pixel + ivec2(0, -8)) * 0.02;
 #endif
 
     halation = vec3(
@@ -920,16 +963,16 @@ void main() {
       bloom.r * 0.34
     );
 #if TEXTURE_SAMPLES_PER_PIXEL >= 17
-    bloom += brightSample(vUv + vec2(uTexel.x * 16.0, 0.0)) * 0.012;
+    bloom += brightSample(pixel + ivec2(16, 0)) * 0.012;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 18
-    bloom += brightSample(vUv - vec2(uTexel.x * 16.0, 0.0)) * 0.012;
+    bloom += brightSample(pixel + ivec2(-16, 0)) * 0.012;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 19
-    bloom += brightSample(vUv + vec2(0.0, uTexel.y * 16.0)) * 0.012;
+    bloom += brightSample(pixel + ivec2(0, 16)) * 0.012;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 20
-    bloom += brightSample(vUv - vec2(0.0, uTexel.y * 16.0)) * 0.012;
+    bloom += brightSample(pixel + ivec2(0, -16)) * 0.012;
 #endif
   }
 
@@ -970,7 +1013,24 @@ function buildBounceLighting(): Float32Array {
   return new Float32Array(lighting);
 }
 
+// Accumulated mirror tint after each number of reflections.
+function buildBounceTint(): Float32Array {
+  const tint: number[] = [];
+  const mirrorTint: Point = [0.965, 0.978, 0.992];
+
+  for (let bounce = 0; bounce < MIRROR_BOUNCES; bounce++) {
+    tint.push(
+      mirrorTint[0] ** bounce,
+      mirrorTint[1] ** bounce,
+      mirrorTint[2] ** bounce,
+    );
+  }
+
+  return new Float32Array(tint);
+}
+
 const BOUNCE_LIGHTING = buildBounceLighting();
+const BOUNCE_TINT = buildBounceTint();
 
 function normalizePoint(point: Point): Point {
   const inverseLength = 1 / Math.hypot(...point);
@@ -1415,6 +1475,10 @@ export default function MirrorChamber() {
           uRotation: { value: sceneRotation },
           uZoom: { value: SQUARE_VIEWPORT_DEFAULT_ZOOM },
           uBounceLighting: { value: BOUNCE_LIGHTING },
+          uBounceTint: { value: BOUNCE_TINT },
+          uFaceNormal: { value: new Float32Array(FACE_NORMALS.flat()) },
+          uFaceU: { value: new Float32Array(FACE_U_AXES.flat()) },
+          uFaceV: { value: new Float32Array(FACE_V_AXES.flat()) },
           uFrameColor: { value: null },
           uFrameDepth: { value: null },
         },
