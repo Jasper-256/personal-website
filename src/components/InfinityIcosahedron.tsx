@@ -154,8 +154,11 @@ uniform vec2 uResolution;
 uniform float uTime;
 uniform mat3 uRotation;
 uniform float uZoom;
+// rgb: bar color times depth loss and mirror tint. a: depth loss.
 uniform vec4 uBounceLighting[${MIRROR_BOUNCES}];
 uniform vec3 uBounceTint[${MIRROR_BOUNCES}];
+// Width of one pixel, in scene units, per unit of ray length.
+uniform float uPixelFootprint;
 uniform highp sampler2D uFrameColor;
 uniform highp sampler2D uFrameDepth;
 
@@ -426,8 +429,12 @@ float backgroundShadow(vec3 ro, vec3 rd) {
   float shadow = 1.0;
   if (rd.y < -0.0001) {
     float floorT = (-1.50 - ro.y) / rd.y;
-    if (floorT > 0.0) {
-      vec3 point = ro + rd * floorT;
+    vec3 point = ro + rd * floorT;
+    // Beyond this the broad shadow is far below one output level.
+    if (
+      floorT > 0.0 &&
+      point.x * point.x * 0.52 + point.z * point.z * 0.24 < 7.0
+    ) {
       float contact = exp(
         -point.x * point.x * 2.2 -
         point.z * point.z * 1.05
@@ -448,7 +455,12 @@ float backgroundShadow(vec3 ro, vec3 rd) {
   return shadow;
 }
 
-vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
+vec3 traceMirroredInterior(
+  vec3 ro,
+  vec3 rd,
+  int entryFace,
+  float pathLength
+) {
   vec3 radiance = vec3(0.0);
   // Scalar reflectivity; the per-bounce mirror tint comes from uBounceTint.
   float throughput = 1.0;
@@ -494,14 +506,20 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
     float nearestBar = sqrt(nearestBarSquared);
     vec4 bounceLighting = uBounceLighting[bounce];
     vec3 bounceTint = uBounceTint[bounce];
-    vec3 barColor = bounceLighting.rgb;
-    float depthLoss = bounceLighting.a;
     // Combine glow and air attenuation into one exponential per bounce.
     float glow = exp(-nearestBar * 42.0 - nearestAlong * 0.035);
-    radiance += throughput * depthLoss * bounceTint * barColor *
-      glow * 0.018;
+    radiance += (throughput * glow * 0.018) * bounceLighting.rgb;
 
-    if (nearestBar < LIGHT_CORE_RADIUS) {
+    // Flat mirrors keep a pixel's ray cone growing linearly with path
+    // length. Box-filter the tube edge over that footprint so distant,
+    // pixel-thin bars resolve smoothly instead of breaking into stair steps.
+    float footprint = (pathLength + nearestAlong) * uPixelFootprint;
+    float inverseFootprint = 1.0 / footprint;
+    if (nearestBar < LIGHT_CORE_RADIUS + 0.5 * footprint) {
+      float coverage = min(
+        (LIGHT_CORE_RADIUS - nearestBar) * inverseFootprint + 0.5,
+        1.0
+      );
       float airLoss = exp(-nearestAlong * 0.035);
       float diffuser = 1.0 -
         smoothstep(0.008, LIGHT_CORE_RADIUS, nearestBar);
@@ -511,10 +529,15 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
           (nearestBar * nearestBar) /
           (LIGHT_CORE_RADIUS * LIGHT_CORE_RADIUS)
       ));
-      vec3 tubeColor = mix(barColor, vec3(1.0), diffuser * 0.34);
-      radiance += throughput * depthLoss * airLoss * bounceTint *
-        tubeColor * (0.72 + roundProfile * 1.05);
-      break;
+      // The diffuser whitens the bar color toward its center.
+      float whitening = diffuser * 0.34;
+      vec3 tubeColor = bounceLighting.rgb * (1.0 - whitening) +
+        bounceTint * (bounceLighting.a * whitening);
+      radiance += throughput * coverage * airLoss * tubeColor *
+        (0.72 + roundProfile * 1.05);
+      // Past a mostly covered tube only the dark mirror would show.
+      if (coverage >= 0.5) break;
+      throughput *= 1.0 - coverage;
     }
 
     if (bounce == 0 && entersThroughInset) break;
@@ -526,6 +549,12 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
       // It receives no artificial rail or channel surface.
       break;
     }
+    // Fade the mirror in over one pixel footprint from the inset edge so the
+    // boundary is smooth rather than a hard step.
+    throughput *= min(
+      (edgeDistance - MIRROR_EDGE_INSET) * inverseFootprint,
+      1.0
+    );
     float seam = exp(-edgeDistance * 85.0);
     float faceVariation =
       0.88 + 0.12 * fract(float(faceIndex) * 0.618033);
@@ -548,6 +577,7 @@ vec3 traceMirroredInterior(vec3 ro, vec3 rd, int entryFace) {
     ro = hit - faceNormal * 0.0012;
     entryPoint = vec3(hitPoint.xy, hitPoint.z - 0.0012);
     entryDirection = vec3(exitDirection.xy, -exitDirection.z);
+    pathLength += wallT;
   }
 
   return radiance;
@@ -629,7 +659,8 @@ void main() {
     vec3 interior = traceMirroredInterior(
       insideOrigin,
       rd,
-      nearFace
+      nearFace,
+      nearT
     );
 
     vec3 externalReflection = studioEnvironment(reflectedWorld);
@@ -802,6 +833,14 @@ void main() {
     vec3(0.0035, 0.004, 0.0045) +
     frameReflection * (0.24 + frameFresnel * 0.44) +
     vec3(0.012, 0.013, 0.014) * brushed * 0.34;
+  // Light from the glowing faces spills onto the tube sides that meet the
+  // glass. Those sides face back toward the icosahedron's center.
+  float glassFacing = smoothstep(
+    0.0,
+    0.45,
+    dot(normal, -normalize(vWorldPosition))
+  );
+  color += vec3(1.0, 0.94, 0.86) * (glassFacing * glassFacing * 0.10);
 
   vec2 uv = gl_FragCoord.xy / uResolution;
   float vignette = dot(uv - 0.5, uv - 0.5);
@@ -825,13 +864,15 @@ uniform sampler2D uScene;
 uniform vec2 uTexel;
 uniform float uZoom;
 
-vec4 fetchSceneTexel(ivec2 pixel) {
-  ivec2 maximum = textureSize(uScene, 0) - ivec2(1);
-  return texelFetch(uScene, clamp(pixel, ivec2(0), maximum), 0);
+vec4 fetchSceneTexel(ivec2 pixel, bool clampToEdge) {
+  if (clampToEdge) {
+    pixel = clamp(pixel, ivec2(0), textureSize(uScene, 0) - ivec2(1));
+  }
+  return texelFetch(uScene, pixel, 0);
 }
 
-vec3 brightSample(ivec2 pixel) {
-  vec3 sampleColor = fetchSceneTexel(pixel).rgb;
+vec3 brightSample(ivec2 pixel, bool clampToEdge) {
+  vec3 sampleColor = fetchSceneTexel(pixel, clampToEdge).rgb;
   float brightness = max(
     sampleColor.r,
     max(sampleColor.g, sampleColor.b)
@@ -844,12 +885,12 @@ float luminance(vec3 color) {
   return dot(color, vec3(0.299, 0.587, 0.114));
 }
 
-vec3 antialiasedScene(ivec2 pixel) {
-  vec3 center = fetchSceneTexel(pixel).rgb;
-  vec3 north = fetchSceneTexel(pixel + ivec2(0, 1)).rgb;
-  vec3 south = fetchSceneTexel(pixel + ivec2(0, -1)).rgb;
-  vec3 east = fetchSceneTexel(pixel + ivec2(1, 0)).rgb;
-  vec3 west = fetchSceneTexel(pixel + ivec2(-1, 0)).rgb;
+vec3 antialiasedScene(ivec2 pixel, bool clampToEdge) {
+  vec3 center = fetchSceneTexel(pixel, clampToEdge).rgb;
+  vec3 north = fetchSceneTexel(pixel + ivec2(0, 1), clampToEdge).rgb;
+  vec3 south = fetchSceneTexel(pixel + ivec2(0, -1), clampToEdge).rgb;
+  vec3 east = fetchSceneTexel(pixel + ivec2(1, 0), clampToEdge).rgb;
+  vec3 west = fetchSceneTexel(pixel + ivec2(-1, 0), clampToEdge).rgb;
 
   float centerLuma = luminance(center);
   float northLuma = luminance(north);
@@ -890,24 +931,23 @@ bool canReceiveBloom() {
   vec2 screen = vUv * 2.0 - 1.0;
   screen.x *= uTexel.y / uTexel.x;
   vec3 rayOrigin = vec3(0.0, 0.10, uZoom);
-  vec3 rayDirection = normalize(vec3(screen * 0.79, -2.18));
+  // An unnormalized direction scales both sides of the sphere test equally.
+  vec3 rayDirection = vec3(screen * 0.79, -2.18);
   float bloomReach =
     36.0 * uZoom * (0.79 / 2.18) * uTexel.y;
   float radius = 1.62 + bloomReach;
   float towardCenter = dot(rayOrigin, rayDirection);
   float originDistanceSquared =
     dot(rayOrigin, rayOrigin) - radius * radius;
-  float discriminant =
-    towardCenter * towardCenter - originDistanceSquared;
-  return discriminant >= 0.0 &&
+  return towardCenter * towardCenter >=
+      originDistanceSquared * dot(rayDirection, rayDirection) &&
     (towardCenter < 0.0 || originDistanceSquared <= 0.0);
 }
 
-void main() {
-  ivec2 pixel = ivec2(gl_FragCoord.xy);
+vec3 postProcess(ivec2 pixel, bool clampToEdge) {
   vec2 fromCenter = vUv - 0.5;
   vec2 chromaOffset = fromCenter * 0.00022;
-  vec3 base = antialiasedScene(pixel);
+  vec3 base = antialiasedScene(pixel, clampToEdge);
 #if TEXTURE_SAMPLES_PER_PIXEL >= 2
   base.r = mix(
     base.r,
@@ -927,43 +967,43 @@ void main() {
   vec3 halation = vec3(0.0);
   if (canReceiveBloom()) {
 #if TEXTURE_SAMPLES_PER_PIXEL >= 4
-    bloom += brightSample(pixel) * 0.08;
+    bloom += brightSample(pixel, clampToEdge) * 0.08;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 5
-    bloom += brightSample(pixel + ivec2(2, 0)) * 0.08;
+    bloom += brightSample(pixel + ivec2(2, 0), clampToEdge) * 0.08;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 6
-    bloom += brightSample(pixel + ivec2(-2, 0)) * 0.08;
+    bloom += brightSample(pixel + ivec2(-2, 0), clampToEdge) * 0.08;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 7
-    bloom += brightSample(pixel + ivec2(0, 2)) * 0.08;
+    bloom += brightSample(pixel + ivec2(0, 2), clampToEdge) * 0.08;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 8
-    bloom += brightSample(pixel + ivec2(0, -2)) * 0.08;
+    bloom += brightSample(pixel + ivec2(0, -2), clampToEdge) * 0.08;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 9
-    bloom += brightSample(pixel + ivec2(4, 4)) * 0.04;
+    bloom += brightSample(pixel + ivec2(4, 4), clampToEdge) * 0.04;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 10
-    bloom += brightSample(pixel + ivec2(-4, 4)) * 0.04;
+    bloom += brightSample(pixel + ivec2(-4, 4), clampToEdge) * 0.04;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 11
-    bloom += brightSample(pixel + ivec2(4, -4)) * 0.04;
+    bloom += brightSample(pixel + ivec2(4, -4), clampToEdge) * 0.04;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 12
-    bloom += brightSample(pixel + ivec2(-4, -4)) * 0.04;
+    bloom += brightSample(pixel + ivec2(-4, -4), clampToEdge) * 0.04;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 13
-    bloom += brightSample(pixel + ivec2(8, 0)) * 0.02;
+    bloom += brightSample(pixel + ivec2(8, 0), clampToEdge) * 0.02;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 14
-    bloom += brightSample(pixel + ivec2(-8, 0)) * 0.02;
+    bloom += brightSample(pixel + ivec2(-8, 0), clampToEdge) * 0.02;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 15
-    bloom += brightSample(pixel + ivec2(0, 8)) * 0.02;
+    bloom += brightSample(pixel + ivec2(0, 8), clampToEdge) * 0.02;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 16
-    bloom += brightSample(pixel + ivec2(0, -8)) * 0.02;
+    bloom += brightSample(pixel + ivec2(0, -8), clampToEdge) * 0.02;
 #endif
 
     halation = vec3(
@@ -972,21 +1012,35 @@ void main() {
       bloom.r * 0.34
     );
 #if TEXTURE_SAMPLES_PER_PIXEL >= 17
-    bloom += brightSample(pixel + ivec2(16, 0)) * 0.012;
+    bloom += brightSample(pixel + ivec2(16, 0), clampToEdge) * 0.012;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 18
-    bloom += brightSample(pixel + ivec2(-16, 0)) * 0.012;
+    bloom += brightSample(pixel + ivec2(-16, 0), clampToEdge) * 0.012;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 19
-    bloom += brightSample(pixel + ivec2(0, 16)) * 0.012;
+    bloom += brightSample(pixel + ivec2(0, 16), clampToEdge) * 0.012;
 #endif
 #if TEXTURE_SAMPLES_PER_PIXEL >= 20
-    bloom += brightSample(pixel + ivec2(0, -16)) * 0.012;
+    bloom += brightSample(pixel + ivec2(0, -16), clampToEdge) * 0.012;
 #endif
   }
 
-  vec3 color = base + bloom * 0.72 + halation * 0.026;
-  outColor = vec4(color, 1.0);
+  return base + bloom * 0.72 + halation * 0.026;
+}
+
+void main() {
+  ivec2 pixel = ivec2(gl_FragCoord.xy);
+  // Taps reach 16 texels. Only pixels that close to the border clamp them;
+  // the rest use a copy of the pass without per-tap clamping.
+  ivec2 size = textureSize(uScene, 0);
+  if (
+    any(lessThan(pixel, ivec2(16))) ||
+    any(greaterThanEqual(pixel, size - ivec2(16)))
+  ) {
+    outColor = vec4(postProcess(pixel, true), 1.0);
+  } else {
+    outColor = vec4(postProcess(pixel, false), 1.0);
+  }
 }`;
 
 type Point = [number, number, number];
@@ -1038,8 +1092,21 @@ function buildBounceTint(): Float32Array {
   return new Float32Array(tint);
 }
 
-const BOUNCE_LIGHTING = buildBounceLighting();
 const BOUNCE_TINT = buildBounceTint();
+
+// Premultiplies each bounce's bar color by its depth loss and mirror tint.
+function premultiplyBounceLighting(lighting: Float32Array): Float32Array {
+  const premultiplied = lighting.slice();
+  for (let bounce = 0; bounce < MIRROR_BOUNCES; bounce++) {
+    for (let channel = 0; channel < 3; channel++) {
+      premultiplied[bounce * 4 + channel] *=
+        lighting[bounce * 4 + 3] * BOUNCE_TINT[bounce * 3 + channel];
+    }
+  }
+  return premultiplied;
+}
+
+const BOUNCE_LIGHTING = premultiplyBounceLighting(buildBounceLighting());
 
 function normalizePoint(point: Point): Point {
   const inverseLength = 1 / Math.hypot(...point);
@@ -1111,7 +1178,8 @@ function appendFrameCylinder(
     const b0 = a0 + 1;
     const a1 = a0 + 2;
     const b1 = a0 + 3;
-    indices.push(a0, b0, b1, a0, b1, a1);
+    // Counterclockwise from outside, so back faces can be culled.
+    indices.push(a0, b1, b0, a0, a1, b1);
   }
 }
 
@@ -1480,6 +1548,7 @@ export default function MirrorChamber() {
         fragmentShader: FRAGMENT_SHADER,
         uniforms: {
           uResolution: { value: sceneResolution },
+          uPixelFootprint: { value: 0 },
           uTime: { value: 0 },
           uRotation: { value: sceneRotation },
           uZoom: { value: SQUARE_VIEWPORT_DEFAULT_ZOOM },
@@ -1521,7 +1590,7 @@ export default function MirrorChamber() {
         depthTest: true,
         depthWrite: true,
         depthFunc: THREE.LessDepth,
-        side: THREE.DoubleSide,
+        side: THREE.FrontSide,
         blending: THREE.NoBlending,
         toneMapped: false,
       });
@@ -1631,6 +1700,9 @@ export default function MirrorChamber() {
         renderTarget.setSize(width, height);
         frameTarget.setSize(width, height);
         sceneResolution.set(width, height);
+        // Matches the camera ray spread in the scene fragment shader.
+        sceneMaterial.uniforms.uPixelFootprint.value =
+          (2 * 0.79) / (2.18 * height);
         frameResolution.set(width, height);
         postTexel.set(1 / width, 1 / height);
       };
