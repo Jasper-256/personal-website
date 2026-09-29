@@ -1468,6 +1468,9 @@ export default function MirrorChamber() {
 
     let renderer: THREE.WebGLRenderer | null = null;
     let animationFrame = 0;
+    let renderTimer = 0;
+    let renderGeneration = 0;
+    let frameSync: WebGLSync | null = null;
     let disposed = false;
 
     try {
@@ -1714,8 +1717,33 @@ export default function MirrorChamber() {
       let fpsSampleStartedAt = startedAt;
       let fpsFrameCount = 0;
 
-      const render = (now: number) => {
+      const render = () => {
         if (disposed) return;
+        const now = performance.now();
+        renderGeneration += 1;
+        window.cancelAnimationFrame(animationFrame);
+        window.clearTimeout(renderTimer);
+        animationFrame = window.requestAnimationFrame(render);
+        if (document.hidden) {
+          return;
+        }
+        if (frameSync) {
+          const status = gl.clientWaitSync(frameSync, 0, 0);
+          if (status === gl.TIMEOUT_EXPIRED) {
+            const generation = renderGeneration;
+            const retry = () => {
+              if (generation === renderGeneration) render();
+            };
+            if (typeof window.scheduler !== "undefined") {
+              void window.scheduler.postTask(retry, { delay: 1 });
+            } else {
+              renderTimer = window.setTimeout(retry, 1);
+            }
+            return;
+          }
+          gl.deleteSync(frameSync);
+          frameSync = null;
+        }
 
         fpsFrameCount += 1;
         const fpsSampleDuration = now - fpsSampleStartedAt;
@@ -1785,10 +1813,12 @@ export default function MirrorChamber() {
         activeRenderer.setRenderTarget(renderTarget);
         activeRenderer.clear(true, false, false);
         activeRenderer.render(scenePass, camera);
+        frameSync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
 
         activeRenderer.setRenderTarget(null);
         activeRenderer.render(postPass, camera);
-        animationFrame = window.requestAnimationFrame(render);
+        gl.flush();
+        renderTimer = window.setTimeout(render, Math.ceil(1000 / 60));
       };
 
       const touchPointers = new Map<
@@ -2041,6 +2071,8 @@ export default function MirrorChamber() {
       return () => {
         disposed = true;
         window.cancelAnimationFrame(animationFrame);
+        window.clearTimeout(renderTimer);
+        if (frameSync) gl.deleteSync(frameSync);
         canvas.removeEventListener("pointerdown", pointerDown);
         canvas.removeEventListener("pointermove", pointerMove);
         canvas.removeEventListener("pointerup", pointerUp);
@@ -2058,6 +2090,8 @@ export default function MirrorChamber() {
     } catch (caught) {
       disposed = true;
       window.cancelAnimationFrame(animationFrame);
+      window.clearTimeout(renderTimer);
+      if (frameSync) gl.deleteSync(frameSync);
       renderer?.dispose();
       const message =
         caught instanceof Error
