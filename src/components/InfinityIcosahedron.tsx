@@ -1762,7 +1762,8 @@ export default function MirrorChamber() {
           controls.angularVelocityY *= momentumDecay;
         }
         controls.zoom +=
-          (controls.targetZoom - controls.zoom) * 0.08;
+          (controls.targetZoom - controls.zoom) *
+          (1 - Math.pow(0.92, (elapsedMilliseconds * 240) / 1000));
 
         const elapsedSeconds = (now - startedAt) / 1000;
         writeQuaternionMatrix(
