@@ -468,8 +468,12 @@ vec3 traceMirroredInterior(
   // the in-plane components and negates the normal component.
   vec3 entryPoint = faceLocalPoint(ro, entryFace);
   vec3 entryDirection = faceLocalDirection(rd, entryFace);
-  bool entersThroughInset =
-    faceLocalEdgeDistance(entryPoint) < MIRROR_EDGE_INSET;
+  // A ray entering through the inset stops at its first wall: no edge
+  // distance can reach this limit. Later walls use the inset itself.
+  float insetLimit =
+    faceLocalEdgeDistance(entryPoint) < MIRROR_EDGE_INSET
+      ? FAR
+      : MIRROR_EDGE_INSET;
 
   for (int bounce = 0; bounce < MIRROR_BOUNCES; bounce++) {
 
@@ -514,10 +518,9 @@ vec3 traceMirroredInterior(
     // length. Box-filter the tube edge over that footprint so distant,
     // pixel-thin bars resolve smoothly instead of breaking into stair steps.
     float footprint = (pathLength + nearestAlong) * uPixelFootprint;
-    float inverseFootprint = 1.0 / footprint;
     if (nearestBar < LIGHT_CORE_RADIUS + 0.5 * footprint) {
       float coverage = min(
-        (LIGHT_CORE_RADIUS - nearestBar) * inverseFootprint + 0.5,
+        (LIGHT_CORE_RADIUS - nearestBar) / footprint + 0.5,
         1.0
       );
       float airLoss = exp(-nearestAlong * 0.035);
@@ -540,19 +543,21 @@ vec3 traceMirroredInterior(
       throughput *= 1.0 - coverage;
     }
 
-    if (bounce == 0 && entersThroughInset) break;
-
     vec3 hitPoint = exitPoint + exitDirection * wallT;
     float edgeDistance = faceLocalEdgeDistance(hitPoint);
-    if (edgeDistance < MIRROR_EDGE_INSET) {
+    if (edgeDistance < insetLimit) {
       // The inset is empty space between the light and mirror.
       // It receives no artificial rail or channel surface.
       break;
     }
-    // Fade the mirror in over one pixel footprint from the inset edge so the
-    // boundary is smooth rather than a hard step.
+    pathLength += wallT;
+    // Box-filter the inset edge over the pixel's footprint on the mirror,
+    // which widens at grazing incidence. Centered on the edge, it starts at
+    // one half where the inset begins.
     throughput *= min(
-      (edgeDistance - MIRROR_EDGE_INSET) * inverseFootprint,
+      (edgeDistance - MIRROR_EDGE_INSET) * exitDenominator /
+        (pathLength * uPixelFootprint) +
+      0.5,
       1.0
     );
     float seam = exp(-edgeDistance * 85.0);
@@ -577,7 +582,7 @@ vec3 traceMirroredInterior(
     ro = hit - faceNormal * 0.0012;
     entryPoint = vec3(hitPoint.xy, hitPoint.z - 0.0012);
     entryDirection = vec3(exitDirection.xy, -exitDirection.z);
-    pathLength += wallT;
+    insetLimit = MIRROR_EDGE_INSET;
   }
 
   return radiance;
