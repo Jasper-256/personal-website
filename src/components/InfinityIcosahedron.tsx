@@ -347,7 +347,6 @@ ${axisProjections("ro", "q")}
   // A zero entry distance would mean the camera is inside the icosahedron.
   if (entry >= exit || entry < 16u) return false;
 
-  // Recompute the entry face exactly with the original arithmetic.
   int pair = int(entry & 15u);
   vec4 axis = uPairAxis[pair];
   float signedDirection = dot(axis.xyz, rd);
@@ -372,7 +371,7 @@ float intersectInterior(
 ) {
 ${axisProjections("rd", "s")}
 ${axisProjections("ro", "q")}
-  // Each pair's exit distance through its outgoing face, less the original
+  // Each pair's exit distance through its outgoing face, less the
   // 0.0002 minimum, carries the pair index in its low mantissa bits. An
   // unsigned minimum then selects the nearest wall; negative and NaN lose.
   highp uint best = 0xffffffffu;
@@ -392,7 +391,6 @@ ${axisProjections("ro", "q")}
   exitDenominator = 1.0;
   if (best >= 0x7f800000u) return FAR;
 
-  // Recompute the winning wall exactly with the original arithmetic.
   int pair = int(best & 15u);
   vec4 axis = uPairAxis[pair];
   float signedDenominator = dot(axis.xyz, rd);
@@ -547,7 +545,6 @@ vec3 traceMirroredInterior(
     float edgeDistance = faceLocalEdgeDistance(hitPoint);
     if (edgeDistance < insetLimit) {
       // The inset is empty space between the light and mirror.
-      // It receives no artificial rail or channel surface.
       break;
     }
     pathLength += wallT;
@@ -625,7 +622,7 @@ void main() {
       nearT > 0.0;
   }
 
-  // Resolve the original strict LessDepth frame test before tracing mirrors.
+  // Resolve the strict LessDepth frame test before tracing mirrors.
   // The frame attachment is separate from this scene's destination attachment.
   if (glassHit) {
     const float depthNear = 0.1;
@@ -1219,7 +1216,7 @@ function appendFrameSphere(
 
   const baseVertex = target.length / 6;
   const stride = longitudeSegments + 1;
-  // Retain seam and pole vertices, including their original signed zeros.
+  // Retain seam and pole vertices, including their signed zeros.
   for (let latitude = 0; latitude <= latitudeSegments; latitude++) {
     for (let longitude = 0; longitude <= longitudeSegments; longitude++) {
       const normal = normalAt(latitude, longitude);
@@ -1658,7 +1655,7 @@ export default function MirrorChamber() {
       renderTarget.texture.colorSpace = THREE.NoColorSpace;
       postMaterial.uniforms.uScene.value = renderTarget.texture;
 
-      // UnsignedIntType selects DEPTH_COMPONENT24, matching the original target.
+      // UnsignedIntType selects DEPTH_COMPONENT24.
       const frameTarget = new THREE.WebGLRenderTarget(1, 1, {
         minFilter: THREE.NearestFilter,
         magFilter: THREE.NearestFilter,
