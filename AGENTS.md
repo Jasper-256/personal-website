@@ -5,5 +5,4 @@
 - Verify visual quality across multiple zoom levels, orientations, and viewport sizes; avoid optimizations that only work for the benchmark scene.
 - Compare baseline and candidate on identical hardware, rendering settings, and moving camera paths. Repeat measurements to distinguish real gains from noise. Do not present GPU throughput as displayed FPS.
 - Report startup and memory costs alongside performance gains.
-
 - Compare performance on this machine's 5070 GPU, as well as it's integrated graphics.
