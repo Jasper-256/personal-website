@@ -1,0 +1,188 @@
+---
+import "@/styles/ballot-2026.css";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Every proposition and measure on the November 3, 2026 Santa Clara County ballot, with official text, plain-English summaries, and a private place to mark your picks." />
+    <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16" />
+    <title>Nov 3, 2026 Ballot - Jasper Morgal</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="wrap">
+        <div class="title-row">
+          <div>
+            <p class="eyebrow">Santa Clara County · General Election</p>
+            <h1>November 3, 2026 Ballot</h1>
+          </div>
+          <div class="progress desktop-only" aria-live="polite">
+            <div class="progress-text">
+              <strong class="progress-count">0</strong> of <span class="progress-total">0</span> decided
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill"></div>
+            </div>
+          </div>
+        </div>
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="Show">
+            <button type="button" data-status="all" class="active">
+              All
+            </button>
+            <button type="button" data-status="undecided">
+              Undecided
+            </button>
+            <button type="button" data-status="decided">
+              Decided
+            </button>
+          </div>
+          <button type="button" id="areas-btn" class="btn" aria-expanded="false" aria-controls="areas-panel">
+            Areas: <span id="areas-label">All</span>
+          </button>
+          <span class="spacer"></span>
+          <button type="button" class="btn primary summary-btn desktop-only">
+            My picks
+          </button>
+        </div>
+        <div id="areas-panel" class="areas-panel" hidden>
+          <p class="hint">
+            Local measures only appear on ballots inside that city or district. Pick the areas you live in to hide the rest (not sure? check your sample ballot or{" "}
+            <a href="https://vote.santaclaracounty.gov/" target="_blank" rel="noopener">
+              vote.santaclaracounty.gov
+            </a>
+            ). State props and Measure RTM are always shown.
+          </p>
+          <div id="areas-list" class="chips"></div>
+          <div class="areas-actions">
+            <button type="button" class="link" id="areas-clear">
+              Show all areas
+            </button>
+            <button type="button" class="btn" id="areas-done">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <nav class="jump" id="jump" aria-label="Jump to measure">
+      <div class="wrap jump-inner"></div>
+    </nav>
+
+    <main class="wrap">
+      <p class="intro">Official title and ballot text next to a plain-English summary (unofficial). Your picks are saved only in this browser (localStorage). Nothing is sent anywhere.</p>
+      <div id="sections"></div>
+
+      <footer class="site-footer">
+        <p>
+          Official text:{" "}
+          <a href="https://voterguide.sos.ca.gov/" target="_blank" rel="noopener">
+            CA Secretary of State Voter Information Guide
+          </a>{" "}
+          (state props) and the{" "}
+          <a href="https://vote.santaclaracounty.gov/list-local-measures-4" target="_blank" rel="noopener">
+            Santa Clara County Registrar of Voters
+          </a>{" "}
+          (local measures). Plain-English summaries are unofficial and may simplify; read the official guide for full text, analysis and arguments.
+        </p>
+        <p>
+          Register by <strong>Oct 19</strong> · Election Day <strong>Tue, Nov 3</strong>, polls open 7 a.m.–8 p.m.
+        </p>
+        <p>
+          <button type="button" class="link danger" id="reset-btn">
+            Clear all my picks
+          </button>
+        </p>
+      </footer>
+    </main>
+
+    <div class="mobile-bar" aria-live="polite">
+      <div class="progress">
+        <div class="progress-text">
+          <strong class="progress-count">0</strong> of <span class="progress-total">0</span> decided
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+      </div>
+      <button type="button" class="btn primary summary-btn">
+        My picks
+      </button>
+    </div>
+
+    <dialog id="summary-dialog">
+      <div class="dialog-head">
+        <h2>My picks</h2>
+        <button type="button" class="icon-btn" id="summary-close" aria-label="Close">
+          ✕
+        </button>
+      </div>
+      <div id="summary-body"></div>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="copy-btn">
+          Copy as text
+        </button>
+        <button type="button" class="btn" id="print-btn">
+          Print
+        </button>
+      </div>
+    </dialog>
+
+    <template id="card-tpl">
+      <article class="card">
+        <header class="card-head">
+          <div class="card-id">
+            <span class="badge"></span>
+            <span class="jur"></span>
+          </div>
+          <h3 class="card-title"></h3>
+          <div class="meta">
+            <span class="type"></span> · <span class="threshold"></span> to pass
+          </div>
+        </header>
+        <div class="card-body">
+          <section class="official">
+            <button type="button" class="official-toggle" aria-expanded="false"></button>
+            <div class="official-content">
+              <h4>Official ballot text</h4>
+              <p class="official-text"></p>
+              <div class="extra"></div>
+            </div>
+          </section>
+          <section class="plain">
+            <h4>In plain English</h4>
+            <p class="plain-text"></p>
+          </section>
+        </div>
+        <footer class="card-vote">
+          <div class="vote-group" role="radiogroup">
+            <button type="button" role="radio" class="vote yes" data-vote="yes" aria-checked="false">
+              Yes
+            </button>
+            <button type="button" role="radio" class="vote no" data-vote="no" aria-checked="false">
+              No
+            </button>
+            <button type="button" role="radio" class="vote skip" data-vote="skip" aria-checked="false">
+              Skip
+            </button>
+          </div>
+          <details class="note">
+            <summary>Note</summary>
+            <textarea rows="2" placeholder="Why? (saved in this browser)"></textarea>
+          </details>
+        </footer>
+      </article>
+    </template>
+
+    <script is:inline src="/ballot-2026/data.js"></script>
+    <script is:inline src="/ballot-2026/app.js"></script>
+  </body>
+</html>
