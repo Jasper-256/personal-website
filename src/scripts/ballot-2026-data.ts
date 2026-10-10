@@ -8,7 +8,42 @@
 //
 // `plain` fields are unofficial plain-English summaries.
 
-window.BALLOT = {
+interface BaseMeasure {
+  id: string;
+  label: string;
+  jurisdiction: string;
+  title: string;
+  type: string;
+  threshold: string;
+  official: string;
+  plain: string;
+}
+
+/** State props also carry the Voter Information Guide's yes/no meanings and fiscal impact. */
+export interface StateMeasure extends BaseMeasure {
+  fiscal: string;
+  yes: string;
+  no: string;
+  supporters: string;
+  opponents: string;
+}
+
+export type Measure = BaseMeasure | StateMeasure;
+
+export interface BallotSection {
+  id: "state" | "regional" | "local";
+  title: string;
+  blurb: string;
+  measures: Measure[];
+}
+
+export interface Ballot {
+  election: string;
+  county: string;
+  sections: BallotSection[];
+}
+
+export const BALLOT: Ballot = {
   election: "November 3, 2026 General Election",
   county: "Santa Clara County",
   sections: [
