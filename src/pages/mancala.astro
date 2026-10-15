@@ -8,13 +8,14 @@ import Layout from "@/layouts/Layout.astro";
   <canvas id="board"></canvas>
   <p id="status">Your turn</p>
   <p>
-    Difficulty:
+    Look ahead:
     <label>
-      <select id="difficulty">
-        <option value="1">Easy</option>
-        <option value="3">Medium</option>
-        <option value="6">Hard</option>
-        <option value="0" selected>Expert</option>
+      <select id="lookahead">
+        <option value="1">1 move</option>
+        <option value="2">2 moves</option>
+        <option value="4">4 moves</option>
+        <option value="8">8 moves</option>
+        <option value="0" selected>Max</option>
       </select>
     </label>
   </p>

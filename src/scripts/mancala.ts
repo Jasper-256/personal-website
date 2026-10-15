@@ -4,7 +4,7 @@ const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const statusEl = document.getElementById("status")!;
 const scoreEl = document.getElementById("score")!;
-const difficultyEl = document.getElementById("difficulty") as HTMLSelectElement;
+const lookaheadEl = document.getElementById("lookahead") as HTMLSelectElement;
 const newGameEl = document.getElementById("newgame")!;
 
 const worker = new Worker(new URL("./mancala-worker.ts", import.meta.url), { type: "module" });
@@ -559,7 +559,7 @@ function startTurn(extraTurn: boolean): void {
   aiThinkStart = performance.now();
   statusEl.textContent = extraTurn ? "Computer goes again..." : "Thinking...";
   requestDraw();
-  worker.postMessage({ board, side: AI, time: AI_TIME, depth: parseInt(difficultyEl.value) || 0, gen: gameGen });
+  worker.postMessage({ board, side: AI, time: AI_TIME, depth: parseInt(lookaheadEl.value) || 0, gen: gameGen });
 }
 
 worker.onmessage = (e: MessageEvent<{ move: number; gen: number }>) => {
