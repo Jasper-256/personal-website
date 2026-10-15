@@ -4,7 +4,7 @@ const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const statusEl = document.getElementById("status")!;
 const scoreEl = document.getElementById("score")!;
-const timeEl = document.getElementById("time") as HTMLSelectElement;
+const difficultyEl = document.getElementById("difficulty") as HTMLSelectElement;
 const newGameEl = document.getElementById("newgame")!;
 
 const worker = new Worker(new URL("./mancala-worker.ts", import.meta.url), { type: "module" });
@@ -512,6 +512,8 @@ let gameGen = 0;
 let aiThinkStart = 0;
 
 const AI_DELAY = 800;
+// Expert searches as deep as it can in this long; easier levels stop at a fixed depth.
+const AI_TIME = 1000;
 
 const sleepUntil = (t: number) => new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, t - performance.now())));
 
@@ -557,7 +559,7 @@ function startTurn(extraTurn: boolean): void {
   aiThinkStart = performance.now();
   statusEl.textContent = extraTurn ? "Computer goes again..." : "Thinking...";
   requestDraw();
-  worker.postMessage({ board, side: AI, time: parseInt(timeEl.value) || 1000, gen: gameGen });
+  worker.postMessage({ board, side: AI, time: AI_TIME, depth: parseInt(difficultyEl.value) || 0, gen: gameGen });
 }
 
 worker.onmessage = (e: MessageEvent<{ move: number; gen: number }>) => {

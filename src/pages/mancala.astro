@@ -8,14 +8,13 @@ import Layout from "@/layouts/Layout.astro";
   <canvas id="board"></canvas>
   <p id="status">Your turn</p>
   <p>
-    AI think time:
+    Difficulty:
     <label>
-      <select id="time">
-        <option value="250">0.25s</option>
-        <option value="500">0.5s</option>
-        <option value="1000" selected>1s</option>
-        <option value="2000">2s</option>
-        <option value="5000">5s</option>
+      <select id="difficulty">
+        <option value="1">Easy</option>
+        <option value="3">Medium</option>
+        <option value="6">Hard</option>
+        <option value="0" selected>Expert</option>
       </select>
     </label>
   </p>
