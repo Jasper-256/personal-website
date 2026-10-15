@@ -1,0 +1,48 @@
+---
+import Layout from "@/layouts/Layout.astro";
+---
+
+<Layout title="Mancala - Jasper Morgal">
+  <h1>Mancala</h1>
+  <p id="score">You: 0 | Computer: 0</p>
+  <canvas id="board"></canvas>
+  <p id="status">Your turn</p>
+  <p>
+    AI think time:
+    <label>
+      <select id="time">
+        <option value="250">0.25s</option>
+        <option value="500">0.5s</option>
+        <option value="1000" selected>1s</option>
+        <option value="2000">2s</option>
+        <option value="5000">5s</option>
+      </select>
+    </label>
+  </p>
+  <p class="pointer" id="newgame">New game</p>
+  <script>
+    import "@/scripts/mancala";
+  </script>
+</Layout>
+
+<style>
+  p {
+    font-family: "Menlo", monospace;
+  }
+  select {
+    vertical-align: top;
+  }
+  canvas {
+    display: block;
+    width: min(100%, 900px, 150vh);
+    aspect-ratio: 84 / 32;
+    margin: 0 auto;
+    touch-action: manipulation;
+  }
+  @media (max-width: 600px) and (orientation: portrait) {
+    canvas {
+      width: min(100%, 26vh);
+      aspect-ratio: 32 / 84;
+    }
+  }
+</style>
