@@ -3,7 +3,6 @@ import { type Board, type Side, SIZE, PITS, createBoard, playMove, pitOf, storeO
 const canvas = document.getElementById("board") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const statusEl = document.getElementById("status")!;
-const scoreEl = document.getElementById("score")!;
 const lookaheadEl = document.getElementById("lookahead") as HTMLSelectElement;
 const newGameEl = document.getElementById("newgame")!;
 
@@ -409,8 +408,6 @@ function playable(p: number): boolean {
   return !busy && !gameOver && turn === HUMAN && p >= 0 && p < PITS && board[p] > 0;
 }
 
-let lastScore = "";
-
 function draw(now: number): void {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
@@ -464,12 +461,6 @@ function draw(now: number): void {
     ctx.fillText(String(counts[p]), q.lx + 1, q.ly + 1);
     ctx.fillStyle = isStore(p) ? "#fff6e6" : "rgba(255, 240, 220, 0.9)";
     ctx.fillText(String(counts[p]), q.lx, q.ly);
-  }
-
-  const score = `You: ${counts[storeOf(HUMAN)]} | Computer: ${counts[storeOf(AI)]}`;
-  if (score !== lastScore) {
-    scoreEl.textContent = score;
-    lastScore = score;
   }
 
   if (gameOver) drawGameOverOverlay();
