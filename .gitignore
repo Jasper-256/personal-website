@@ -25,3 +25,7 @@ pnpm-debug.log*
 
 # cloudflare
 .wrangler/
+
+# mancala book generator outputs
+tools/mancala-book/solver
+tools/mancala-book/build.mjs

@@ -1,7 +1,7 @@
 {
   "extends": "astro/tsconfigs/strict",
   "include": [".astro/types.d.ts", "**/*"],
-  "exclude": ["dist", "src/worker.ts", "src/workers/**/*.ts"],
+  "exclude": ["dist", "src/worker.ts", "src/workers/**/*.ts", "tools"],
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"]
