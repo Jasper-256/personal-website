@@ -1,0 +1,34 @@
+<mirror-chamber style="display: block;">
+  <main class="experience">
+    <canvas class="chamber" aria-label="A photorealistic interactive icosahedron with one-way mirrored faces and light bars along its interior edges"></canvas>
+    <div class="fps-counter" aria-hidden="true">-- FPS</div>
+    <div class="error-panel" role="alert" hidden></div>
+  </main>
+</mirror-chamber>
+
+<script>
+  import { mountMirrorChamber } from "./infinity-icosahedron-renderer";
+
+  class MirrorChamberElement extends HTMLElement {
+    private cleanup: (() => void) | null = null;
+
+    connectedCallback() {
+      if (!this.isConnected || this.cleanup) return;
+      const canvas = this.querySelector<HTMLCanvasElement>("canvas.chamber");
+      const fpsCounter = this.querySelector<HTMLDivElement>(".fps-counter");
+      const errorPanel = this.querySelector<HTMLDivElement>(".error-panel");
+      if (!canvas || !fpsCounter || !errorPanel) return;
+      this.cleanup = mountMirrorChamber(canvas, fpsCounter, errorPanel);
+    }
+
+    disconnectedCallback() {
+      const cleanup = this.cleanup;
+      this.cleanup = null;
+      cleanup?.();
+    }
+  }
+
+  if (!customElements.get("mirror-chamber")) {
+    customElements.define("mirror-chamber", MirrorChamberElement);
+  }
+</script>
