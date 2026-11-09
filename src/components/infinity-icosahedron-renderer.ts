@@ -14,6 +14,13 @@ const FACE_EDGE_INRADIUS = ICOSAHEDRON_EDGE_LENGTH / (2 * Math.sqrt(3));
 const LIGHT_BAR_HALF_LENGTH = ICOSAHEDRON_EDGE_LENGTH * (0.5 - LIGHT_BAR_TRIM);
 const SQUARE_VIEWPORT_DEFAULT_ZOOM = 5.55;
 const DRAG_RADIANS_ACROSS_SHAPE = Math.PI * 0.75;
+// Touch input arrives in whole device pixels, so a slow drag lands 0, 1 or 2
+// steps per frame. The shown rotation follows the dragged rotation through a
+// low-pass filter whose cutoff rises with drag speed (a One Euro filter): slow
+// drags glide between steps, fast drags stay nearly lag-free.
+const DRAG_SMOOTHING_MIN_CUTOFF_HZ = 2.5;
+const DRAG_SMOOTHING_CUTOFF_HZ_PER_RADIAN_PER_SECOND = 8;
+const DRAG_SPEED_CUTOFF_HZ = 6;
 const MIN_ZOOM = 1.72;
 const MAX_ZOOM = 40;
 
@@ -1329,6 +1336,19 @@ function normalizeQuaternion(quaternion: Quaternion): Quaternion {
   return [quaternion[0] * inverseLength, quaternion[1] * inverseLength, quaternion[2] * inverseLength, quaternion[3] * inverseLength];
 }
 
+// Normalized linear blend; accurate for the small gaps the drag filter closes.
+function blendQuaternions(from: Quaternion, to: Quaternion, amount: number): Quaternion {
+  const sign = from[0] * to[0] + from[1] * to[1] + from[2] * to[2] + from[3] * to[3] < 0 ? -1 : 1;
+  const keep = 1 - amount;
+  const take = amount * sign;
+  return normalizeQuaternion([
+    from[0] * keep + to[0] * take,
+    from[1] * keep + to[1] * take,
+    from[2] * keep + to[2] * take,
+    from[3] * keep + to[3] * take,
+  ]);
+}
+
 function axisAngleQuaternion(x: number, y: number, z: number, angle: number): Quaternion {
   const halfAngle = angle * 0.5;
   const scale = Math.sin(halfAngle);
@@ -1389,6 +1409,9 @@ export function mountMirrorChamber(
     x: 0,
     y: 0,
     rotation: INITIAL_ROTATION,
+    shownRotation: INITIAL_ROTATION,
+    dragRadiansSinceFrame: 0,
+    dragSpeed: 0,
     angularVelocityX: 0,
     angularVelocityY: 0,
     lastPointerMoveAt: 0,
@@ -1745,13 +1768,25 @@ export function mountMirrorChamber(
           const integratedTime = MOMENTUM_DECAY_MS * (1 - momentumDecay);
           const momentumRotation = screenDragQuaternion(controls.angularVelocityX * integratedTime, controls.angularVelocityY * integratedTime);
           controls.rotation = normalizeQuaternion(multiplyQuaternions(momentumRotation, controls.rotation));
+          // Momentum is already smooth, so it moves the shown rotation directly.
+          controls.shownRotation = normalizeQuaternion(multiplyQuaternions(momentumRotation, controls.shownRotation));
           controls.angularVelocityX *= momentumDecay;
           controls.angularVelocityY *= momentumDecay;
         }
         controls.zoom += (controls.targetZoom - controls.zoom) * (1 - Math.pow(0.92, (elapsedMilliseconds * 240) / 1000));
 
+        const frameSeconds = elapsedMilliseconds / 1000;
+        if (frameSeconds > 0) {
+          const rawDragSpeed = controls.dragRadiansSinceFrame / frameSeconds;
+          controls.dragRadiansSinceFrame = 0;
+          controls.dragSpeed += (rawDragSpeed - controls.dragSpeed) * (1 - Math.exp(-frameSeconds * 2 * Math.PI * DRAG_SPEED_CUTOFF_HZ));
+          const cutoffHz = DRAG_SMOOTHING_MIN_CUTOFF_HZ + DRAG_SMOOTHING_CUTOFF_HZ_PER_RADIAN_PER_SECOND * controls.dragSpeed;
+          const follow = 1 - Math.exp(-frameSeconds * 2 * Math.PI * cutoffHz);
+          controls.shownRotation = blendQuaternions(controls.shownRotation, controls.rotation, follow);
+        }
+
         const elapsedSeconds = (now - startedAt) / 1000;
-        writeQuaternionMatrix(controls.rotation, rotationMatrix);
+        writeQuaternionMatrix(controls.shownRotation, rotationMatrix);
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, frameTarget.framebuffer);
         gl.enable(gl.DEPTH_TEST);
@@ -1894,6 +1929,7 @@ export function mountMirrorChamber(
       const verticalRotation = deltaY * dragRadiansPerPixel;
       const dragRotation = screenDragQuaternion(horizontalRotation, verticalRotation);
       controls.rotation = normalizeQuaternion(multiplyQuaternions(dragRotation, controls.rotation));
+      controls.dragRadiansSinceFrame += Math.hypot(horizontalRotation, verticalRotation);
       const velocityBlend = Math.min(1, elapsedSinceMove / 20);
       controls.angularVelocityX += (horizontalRotation / elapsedSinceMove - controls.angularVelocityX) * velocityBlend;
       controls.angularVelocityY += (verticalRotation / elapsedSinceMove - controls.angularVelocityY) * velocityBlend;
