@@ -12,7 +12,8 @@
     "cf:dev": "npm run build && wrangler dev",
     "cf:deploy": "npm run build && wrangler deploy",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "update:epoch": "node tools/epoch-data/update.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.3",

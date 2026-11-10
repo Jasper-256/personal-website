@@ -1,0 +1,635 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import eciCsv from "@/data/epoch/eci_scores.csv?raw";
+import metrCsv from "@/data/epoch/metr_time_horizons_external.csv?raw";
+import metadataCsv from "@/data/epoch/model_metadata.csv?raw";
+import source from "@/data/epoch/source.json";
+import { buildForecast } from "@/scripts/ai-frontier-forecast-model";
+
+// Computed at build time from Epoch's raw data; refresh it with `npm run update:epoch`.
+const model = buildForecast({ eci: eciCsv, metr: metrCsv, metadata: metadataCsv });
+
+// Lab colors (validated categorical slots). Labs without a slot share the neutral "other" color.
+const ORG_COLORS: Record<string, string> = {
+  OpenAI: "var(--series-openai)",
+  Anthropic: "var(--series-anthropic)",
+  "Google DeepMind": "var(--series-google)",
+};
+const OTHER_COLOR = "var(--series-other)";
+const orgsPresent = new Set(model.points.map((p) => p.org));
+const legend = [
+  ...Object.entries(ORG_COLORS).filter(([org]) => orgsPresent.has(org)),
+  ...([...orgsPresent].some((org) => !(org in ORG_COLORS)) ? [["Other labs", OTHER_COLOR]] : []),
+];
+const colors = Object.fromEntries([...orgsPresent].map((org) => [org, ORG_COLORS[org] ?? OTHER_COLOR]));
+
+const fmtLongDate = (ms: number) =>
+  new Date(ms).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
+---
+
+<Layout title="AI Frontier Forecast - Jasper Morgal">
+  <h1>AI Frontier Forecast</h1>
+  <p class="lede">
+    This chart graphs every model to push the ECI frontier forward. A linear regression is run over these models and their
+    release dates to predict the consistent trend of increasing ECI. The milestone dates are ECI thresholds from the
+    <a href="https://www.aifuturesmodel.com/">AI Futures Model</a>, which this page attempts to concretely predict using only
+    current ECI data.
+  </p>
+
+  <div class="milestones">
+    {
+      model.milestones.map((m) => (
+        <div class="milestone" data-target={m.date ?? ""}>
+          <div class="ms-label">{m.label}</div>
+          <div class="ms-date">{m.date === null ? "Not on current trend" : fmtLongDate(m.date)}</div>
+          <div class="ms-countdown" aria-live="off">&nbsp;</div>
+          <div class="ms-eci">ECI {m.eci}</div>
+        </div>
+      ))
+    }
+  </div>
+  <p class="trend-note">Frontier trend: {model.trend.slope >= 0 ? "+" : ""}{model.trend.slope.toFixed(1)} ECI / year</p>
+
+  <figure class="viz">
+    <ul class="legend" aria-label="Legend">
+      {
+        legend.map(([name, color]) => (
+          <li>
+            <span class="key-dot" style={`--c: ${color}`} />
+            {name}
+          </li>
+        ))
+      }
+      <li><span class="key-line key-step"></span>Frontier</li>
+      <li><span class="key-line key-trend"></span>Linear trend</li>
+    </ul>
+    <div class="chart" id="chart">
+      <svg id="chart-svg" role="img" aria-label="Frontier ECI score by model release date, with a linear trend line"></svg>
+      <div class="tooltip" id="tooltip" hidden>
+        <div class="tt-name"><span class="tt-key" id="tt-key"></span><span id="tt-name"></span></div>
+        <div class="tt-meta" id="tt-meta"></div>
+        <div class="tt-stats">
+          <span class="tt-stat-value" id="tt-value"></span>
+          <span class="tt-stat-label">ECI</span>
+          <span class="tt-stat-value" id="tt-horizon"></span>
+          <span class="tt-stat-label">predicted 50% time horizon</span>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <p class="source">
+    Data: <a href="https://epoch.ai/eci?view=graph&tab=release-date">Epoch AI, Capabilities Index</a> (CC BY 4.0), retrieved {source.retrieved}.
+  </p>
+
+  <script type="application/json" id="eci-data" set:html={pageData} />
+
+  <style is:global>
+    :root {
+      --surface: #fcfcfc;
+      --ink: #0b0b0b;
+      --ink-2: #52514e;
+      --ink-muted: #807e78;
+      --grid: #e8e7e1;
+      --axis: #c3c2b7;
+      --series-openai: #2a78d6;
+      --series-anthropic: #eb6834;
+      --series-google: #1baf7a;
+      --series-other: #8f8d86;
+      --step: #b9b8b0;
+      --trend: #0b0b0b;
+      --tooltip-bg: #ffffff;
+      --tooltip-border: rgba(11, 11, 11, 0.1);
+      --tooltip-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --surface: #141414;
+        --ink: #f0efec;
+        --ink-2: #c3c2b7;
+        --ink-muted: #8d8b85;
+        --grid: #262625;
+        --axis: #3a3a37;
+        --series-openai: #3987e5;
+        --series-anthropic: #d95926;
+        --series-google: #199e70;
+        --series-other: #77756f;
+        --step: #4a4a46;
+        --trend: #f0efec;
+        --tooltip-bg: #1e1e1e;
+        --tooltip-border: rgba(255, 255, 255, 0.1);
+        --tooltip-shadow: none;
+      }
+    }
+
+    .lede {
+      max-width: 40rem;
+      margin: 0 auto;
+    }
+
+    .milestones {
+      display: flex;
+      justify-content: center;
+      gap: 1rem 3.5rem;
+      flex-wrap: wrap;
+      margin-top: 1.75rem;
+    }
+    .milestone {
+      min-width: 15rem;
+    }
+    .ms-label {
+      font-size: 0.95rem;
+      color: var(--ink-2);
+    }
+    .ms-date {
+      margin-top: 0.15rem;
+      font-size: 2rem;
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+    }
+    .ms-countdown {
+      margin-top: 0.35rem;
+      font-size: 1.05rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .ms-countdown .unit {
+      margin: 0 0.45em 0 0.08em;
+      font-size: 0.8em;
+      color: var(--ink-muted);
+    }
+    .ms-countdown .unit:last-child {
+      margin-right: 0;
+    }
+    .ms-eci {
+      margin-top: 0.2rem;
+      font-size: 0.8rem;
+      color: var(--ink-muted);
+    }
+    .trend-note {
+      margin: 1.25rem 0 0;
+      font-size: 0.85rem;
+      color: var(--ink-muted);
+    }
+
+    .viz {
+      max-width: 960px;
+      margin: 1.5rem auto 0;
+      padding: 0;
+    }
+
+    .legend {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.35rem 1.1rem;
+      margin: 0 0 0.5rem;
+      padding: 0;
+      font-size: 0.85rem;
+      color: var(--ink-2);
+    }
+    .legend li {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .key-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--c);
+    }
+    .key-line {
+      width: 18px;
+      height: 0;
+      border-top: 2px solid var(--step);
+    }
+    .key-trend {
+      border-top: 2px dashed var(--trend);
+      opacity: 0.55;
+    }
+
+    .chart {
+      position: relative;
+      width: 100%;
+    }
+    #chart-svg {
+      display: block;
+      width: 100%;
+      overflow: visible;
+      touch-action: pan-y;
+      font-family: inherit;
+    }
+
+    .tooltip {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      text-align: left;
+      background: var(--tooltip-bg);
+      border: 1px solid var(--tooltip-border);
+      box-shadow: var(--tooltip-shadow);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      color: var(--ink-2);
+      white-space: nowrap;
+      z-index: 2;
+    }
+    .tt-name {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .tt-key {
+      width: 12px;
+      height: 0;
+      border-top: 2px solid;
+    }
+    .tt-meta {
+      margin-top: 1px;
+      color: var(--ink-muted);
+    }
+    .tt-stats {
+      margin-top: 7px;
+      padding-top: 7px;
+      border-top: 1px solid var(--grid);
+      display: grid;
+      grid-template-columns: auto auto;
+      justify-content: start;
+      align-items: baseline;
+      gap: 2px 8px;
+    }
+    .tt-stat-value {
+      font-weight: 600;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+    .tt-stat-label {
+      color: var(--ink-muted);
+    }
+
+    .source {
+      margin-top: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--ink-muted);
+    }
+
+    /* SVG chrome */
+    #chart-svg .grid line {
+      stroke: var(--grid);
+      stroke-width: 1;
+    }
+    #chart-svg .baseline {
+      stroke: var(--axis);
+      stroke-width: 1;
+    }
+    #chart-svg .tick {
+      fill: var(--ink-muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    #chart-svg .axis-title {
+      fill: var(--ink-muted);
+      font-size: 11px;
+    }
+    #chart-svg .step {
+      fill: none;
+      stroke: var(--step);
+      stroke-width: 2;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+    #chart-svg .trend {
+      stroke: var(--trend);
+      stroke-width: 1.5;
+      stroke-dasharray: 5 4;
+      opacity: 0.55;
+    }
+    #chart-svg .trend-ext {
+      opacity: 0.22;
+    }
+    #chart-svg .trend-label {
+      fill: var(--ink-2);
+      font-size: 11px;
+    }
+    #chart-svg .whisker {
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      opacity: 0.35;
+    }
+    #chart-svg .dot {
+      stroke: var(--surface);
+      stroke-width: 2;
+      transition: r 120ms ease;
+    }
+    #chart-svg .point {
+      cursor: pointer;
+      outline: none;
+    }
+    #chart-svg .point.is-active .dot {
+      r: 7px;
+    }
+    #chart-svg .point:focus-visible .dot {
+      stroke: var(--ink);
+    }
+    #chart-svg .label {
+      fill: var(--ink-2);
+      font-size: 11.5px;
+      paint-order: stroke;
+      stroke: var(--surface);
+      stroke-width: 4px;
+      stroke-linejoin: round;
+    }
+    #chart-svg .crosshair {
+      stroke: var(--axis);
+      stroke-width: 1;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      #chart-svg.animate .step {
+        animation: draw 1.4s cubic-bezier(0.3, 0.6, 0.2, 1) both;
+      }
+      #chart-svg.animate .point {
+        animation: pop 400ms ease-out both;
+        animation-delay: calc(var(--i) * 45ms + 200ms);
+      }
+      #chart-svg.animate .trend,
+      #chart-svg.animate .trend-label {
+        animation: fade 600ms ease-out 1.1s both;
+      }
+    }
+    @keyframes draw {
+      from {
+        stroke-dashoffset: var(--len);
+        stroke-dasharray: var(--len);
+      }
+      to {
+        stroke-dashoffset: 0;
+        stroke-dasharray: var(--len);
+      }
+    }
+    @keyframes pop {
+      from {
+        opacity: 0;
+      }
+    }
+    @keyframes fade {
+      from {
+        opacity: 0;
+      }
+    }
+  </style>
+
+  <script>
+    import { countdownParts, evaluate, formatDuration, horizonMinutes, toYear, type Forecast } from "@/scripts/ai-frontier-forecast-model";
+
+    const data: Forecast & { colors: Record<string, string> } = JSON.parse(document.getElementById("eci-data")!.textContent!);
+    const { trend, horizon, colors } = data;
+    const points = data.points.map((p) => ({ ...p, x: toYear(p.date) }));
+    const n = points.length;
+    const trendAt = (x: number) => evaluate(trend, x);
+
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const fmtDate = (iso: string) =>
+      new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+
+    // Countdowns to the milestone dates rendered at build time
+    const countdowns = [...document.querySelectorAll<HTMLElement>(".milestone")]
+      .filter((node) => node.dataset.target)
+      .map((node) => ({ target: Number(node.dataset.target), countdown: node.querySelector<HTMLElement>(".ms-countdown")! }));
+    const tick = () => {
+      const now = Date.now();
+      for (const { target, countdown } of countdowns) {
+        const parts = countdownParts(now, target);
+        if (!parts.length) {
+          countdown.textContent = "Reached on trend";
+          continue;
+        }
+        countdown.replaceChildren();
+        for (const [value, unit] of parts) {
+          const u = document.createElement("span");
+          u.className = "unit";
+          u.textContent = unit;
+          countdown.append(value, u);
+        }
+      }
+    };
+    tick();
+    setInterval(tick, 1000);
+
+    const chart = document.getElementById("chart")!;
+    const svg = document.getElementById("chart-svg") as unknown as SVGSVGElement;
+    const tooltip = document.getElementById("tooltip")!;
+
+    const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number>, parent?: Element) => {
+      const node = document.createElementNS(SVG_NS, tag);
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+      parent?.append(node);
+      return node;
+    };
+
+    // Axis ranges follow the data: whole years across, and a little headroom around the scores
+    const X0 = Math.floor(points[0].x);
+    const X1 = Math.ceil(points[n - 1].x + 0.08);
+    const Y0 = Math.floor((Math.min(...points.map((p) => p.lo ?? p.eci)) - 1) / 5) * 5;
+    const Y1 = Math.ceil((Math.max(...points.map((p) => p.hi ?? p.eci)) + 1) / 10) * 10;
+    const Y_STEP = Y1 - Y0 > 100 ? 20 : 10;
+
+    let firstRender = true;
+    let activeIndex = -1;
+    let positions: { cx: number; cy: number }[] = [];
+    let pointNodes: SVGGElement[] = [];
+    let activate: (i: number) => void = () => {};
+
+    function render() {
+      const width = chart.clientWidth;
+      const narrow = width < 560;
+      const height = Math.round(Math.max(320, Math.min(520, width * 0.58)));
+      const m = { top: 26, right: narrow ? 12 : 20, bottom: 30, left: 38 };
+      const iw = width - m.left - m.right;
+      const ih = height - m.top - m.bottom;
+      const sx = (x: number) => m.left + ((x - X0) / (X1 - X0)) * iw;
+      const sy = (y: number) => m.top + (1 - (y - Y0) / (Y1 - Y0)) * ih;
+
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.setAttribute("height", String(height));
+      svg.replaceChildren();
+      svg.classList.toggle("animate", firstRender);
+
+      // Grid + ticks
+      const grid = el("g", { class: "grid" }, svg);
+      for (let y = Math.ceil(Y0 / Y_STEP) * Y_STEP; y <= Y1; y += Y_STEP) {
+        el("line", { x1: m.left, x2: width - m.right, y1: sy(y), y2: sy(y) }, grid);
+        const t = el("text", { class: "tick", x: m.left - 8, y: sy(y), "text-anchor": "end", "dominant-baseline": "middle" }, svg);
+        t.textContent = String(y);
+      }
+      for (let x = X0; x <= X1; x += 0.5) {
+        const isYear = Number.isInteger(x);
+        if (!isYear && (narrow || X1 - X0 > 5)) continue;
+        if (isYear) el("line", { x1: sx(x), x2: sx(x), y1: m.top, y2: m.top + ih }, grid);
+        const t = el("text", { class: "tick", x: sx(x), y: height - 10, "text-anchor": "middle" }, svg);
+        t.textContent = isYear ? String(x) : "Jul";
+        if (!isYear) t.setAttribute("opacity", "0.6");
+      }
+      el("line", { class: "baseline", x1: m.left, x2: width - m.right, y1: m.top + ih, y2: m.top + ih }, svg);
+      const yTitle = el("text", { class: "axis-title", x: m.left - 8, y: m.top - 14, "text-anchor": "end" }, svg);
+      yTitle.textContent = "ECI";
+
+      // Crosshair (hidden until hover)
+      const crosshair = el("line", { class: "crosshair", y1: m.top, y2: m.top + ih, visibility: "hidden" }, svg);
+
+      // Trend line: solid-dash across the data, fainter extension to the chart edges
+      const xa = points[0].x;
+      const xb = points[n - 1].x;
+      const clip = el("clipPath", { id: "plot-clip" }, el("defs", {}, svg));
+      el("rect", { x: m.left, y: m.top, width: iw, height: ih }, clip);
+      const trendLayer = el("g", { "clip-path": "url(#plot-clip)" }, svg);
+      const seg = (x1: number, x2: number, cls: string) =>
+        el("line", { class: cls, x1: sx(x1), y1: sy(trendAt(x1)), x2: sx(x2), y2: sy(trendAt(x2)) }, trendLayer);
+      seg(X0, xa, "trend trend-ext");
+      seg(xa, xb, "trend");
+      seg(xb, X1, "trend trend-ext");
+
+      if (!narrow) {
+        const lx = xa + 0.23 * (xb - xa);
+        const angle = (Math.atan2(sy(trendAt(lx + 1)) - sy(trendAt(lx)), sx(lx + 1) - sx(lx)) * 180) / Math.PI;
+        const ly = sy(trendAt(lx)) - 10;
+        const tl = el("text", { class: "trend-label", x: sx(lx), y: ly, transform: `rotate(${angle} ${sx(lx)} ${ly})` }, svg);
+        tl.textContent = `${trend.slope >= 0 ? "+" : ""}${trend.slope.toFixed(1)} ECI / year`;
+      }
+
+      // Frontier staircase: holds each record until the next one beats it
+      let d = `M${sx(points[0].x)},${sy(points[0].eci)}`;
+      for (let i = 1; i < n; i++) d += `H${sx(points[i].x)}V${sy(points[i].eci)}`;
+      d += `H${sx(Math.min(X1, xb + 0.06))}`;
+      const step = el("path", { class: "step", d }, svg);
+      step.style.setProperty("--len", String(Math.ceil(step.getTotalLength())));
+
+      // Points
+      positions = [];
+      pointNodes = [];
+      const layer = el("g", {}, svg);
+      points.forEach((p, i) => {
+        const cx = sx(p.x);
+        const cy = sy(p.eci);
+        positions.push({ cx, cy });
+        const g = el(
+          "g",
+          {
+            class: "point",
+            tabindex: 0,
+            role: "img",
+            "aria-label": `${p.name}, ${p.org}, released ${fmtDate(p.date)}, ECI ${p.eci.toFixed(1)}`,
+          },
+          layer,
+        ) as SVGGElement;
+        g.style.setProperty("--i", String(i));
+        if (p.lo !== null && p.hi !== null) {
+          el("line", { class: "whisker", x1: cx, x2: cx, y1: sy(p.lo), y2: sy(p.hi), stroke: colors[p.org] }, g);
+        }
+        el("circle", { class: "dot", cx, cy, r: 5, fill: colors[p.org] }, g);
+        g.addEventListener("focus", () => activate(i));
+        g.addEventListener("blur", () => activate(-1));
+        pointNodes.push(g);
+      });
+
+      // Direct labels on a few milestones
+      const labels = el("g", {}, svg);
+      points.forEach((p, i) => {
+        if (!p.label) return;
+        if (narrow && i !== 0 && i !== n - 1) return;
+        const { cx, cy } = positions[i];
+        const last = i === n - 1;
+        const t = el(
+          "text",
+          {
+            class: "label",
+            x: last ? cx - 10 : cx + 10,
+            y: last ? cy - 2 : i === 0 ? cy - 9 : cy + 16,
+            "text-anchor": last ? "end" : "start",
+          },
+          labels,
+        );
+        t.textContent = p.name.replace(/ \(.*\)$/, "");
+      });
+
+      activate = (i: number) => {
+        if (activeIndex === i) return;
+        activeIndex = i;
+        pointNodes.forEach((node, j) => node.classList.toggle("is-active", j === i));
+        if (i < 0) {
+          tooltip.hidden = true;
+          crosshair.setAttribute("visibility", "hidden");
+          return;
+        }
+        const p = points[i];
+        const { cx, cy } = positions[i];
+        crosshair.setAttribute("x1", String(cx));
+        crosshair.setAttribute("x2", String(cx));
+        crosshair.setAttribute("visibility", "visible");
+
+        document.getElementById("tt-value")!.textContent = p.eci.toFixed(1);
+        document.getElementById("tt-name")!.textContent = p.name;
+        document.getElementById("tt-horizon")!.textContent = `~${formatDuration(horizonMinutes(horizon, p.eci))}`;
+        (document.getElementById("tt-key") as HTMLElement).style.borderColor = colors[p.org];
+        document.getElementById("tt-meta")!.textContent = `${p.org} · ${fmtDate(p.date)}`;
+        tooltip.hidden = false;
+
+        const tw = tooltip.offsetWidth;
+        const th = tooltip.offsetHeight;
+        let left = cx + 14;
+        if (left + tw > width) left = cx - 14 - tw;
+        left = Math.max(0, left);
+        let top = cy - th - 10;
+        if (top < 0) top = cy + 14;
+        tooltip.style.transform = `translate(${left}px, ${top}px)`;
+      };
+
+      firstRender = false;
+    }
+
+    // Pointer: nearest point wins, so readers never have to hit a 10px dot
+    const onPointer = (e: PointerEvent) => {
+      const r = svg.getBoundingClientRect();
+      const px = e.clientX - r.left;
+      const py = e.clientY - r.top;
+      let best = -1;
+      let bestD = Infinity;
+      positions.forEach(({ cx, cy }, i) => {
+        const dd = (cx - px) ** 2 + ((cy - py) * 0.5) ** 2;
+        if (dd < bestD) {
+          bestD = dd;
+          best = i;
+        }
+      });
+      activate(Math.sqrt(bestD) < 80 ? best : -1);
+    };
+    svg.addEventListener("pointermove", onPointer);
+    svg.addEventListener("pointerdown", onPointer);
+    svg.addEventListener("pointerleave", (e) => {
+      if (e.pointerType === "mouse") activate(-1);
+    });
+    // Touch has no hover-out, so a tap anywhere outside the chart clears the selection
+    document.addEventListener("pointerdown", (e) => {
+      if (!svg.contains(e.target as Node)) activate(-1);
+    });
+
+    render();
+    let lastWidth = chart.clientWidth;
+    new ResizeObserver(() => {
+      if (chart.clientWidth === lastWidth) return;
+      lastWidth = chart.clientWidth;
+      activeIndex = -1;
+      tooltip.hidden = true;
+      render();
+    }).observe(chart);
+  </script>
+</Layout>

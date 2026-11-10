@@ -1,0 +1,284 @@
+// Everything on /ai-frontier-forecast is derived from Epoch AI's raw CSVs (src/data/epoch/, refreshed with
+// `npm run update:epoch`) by the formulas below. Nothing here is hand-entered model data, so new
+// data flows through to the frontier, trend line, milestone dates and time-horizon predictions.
+
+// ---------------------------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The frontier series starts at GPT-4's release. Epoch's index begins in Feb 2023 with LLaMA,
+ * which would only count as "frontier" because earlier leading models (GPT-3.5, PaLM) aren't in
+ * the index, so models released before this date are ignored.
+ */
+export const FRONTIER_START_DATE = "2023-03-14";
+
+/**
+ * Release dates that replace Epoch's. Keep these when refreshing the data.
+ *
+ * GPT-4 Turbo (Nov 2023): Epoch dates this model family 2024-01-25 because it folds in
+ * gpt-4-0125-preview (a January 2024 update, whose METR time horizon feeds the score). The family
+ * is named for, and mostly scored on, the original GPT-4 Turbo (gpt-4-1106-preview), released
+ * 2023-11-06.
+ */
+export const DATE_OVERRIDES: Record<string, string> = {
+  "GPT-4 Turbo (Nov 2023)": "2023-11-06",
+};
+
+/** Frontier models that get a direct label on wide screens (the first and latest always do). */
+export const LABELLED_MODELS = ["o1", "GPT-5"];
+
+/** ECI levels whose date on the trend line is shown, with a countdown, at the top of the page. */
+export const MILESTONES = [
+  { label: "Automated coder", eci: 183 },
+  { label: "Artificial superintelligence", eci: 241 },
+];
+
+/** METR suite preferred when a model has several time-horizon measurements. */
+const PREFERRED_METR_VERSION = "METR-Horizon-v1.1";
+
+// ---------------------------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------------------------
+
+export interface FrontierPoint {
+  name: string;
+  org: string;
+  date: string;
+  eci: number;
+  lo: number | null;
+  hi: number | null;
+  label: boolean;
+}
+
+/** y = intercept + slope * x */
+export interface LinearFit {
+  slope: number;
+  intercept: number;
+  r2: number;
+  n: number;
+}
+
+export interface Milestone {
+  label: string;
+  eci: number;
+  /** Epoch milliseconds when the trend line reaches `eci`, or null if the trend never does. */
+  date: number | null;
+}
+
+export interface Forecast {
+  points: FrontierPoint[];
+  /** ECI as a function of decimal year (see `toYear`). */
+  trend: LinearFit;
+  /** log2(50% time horizon in minutes) as a function of ECI. */
+  horizon: LinearFit;
+  milestones: Milestone[];
+}
+
+type Row = Record<string, string>;
+
+// ---------------------------------------------------------------------------------------------
+// Formulas
+// ---------------------------------------------------------------------------------------------
+
+const YEAR_MS = 365.2425 * 86_400_000;
+
+/** ISO date or epoch ms → decimal year. */
+export function toYear(date: string | number): number {
+  const t = typeof date === "number" ? date : Date.parse(`${date}T00:00:00Z`);
+  const y = new Date(t).getUTCFullYear();
+  return y + (t - Date.UTC(y, 0, 1)) / YEAR_MS;
+}
+
+/** Decimal year → epoch ms (inverse of `toYear`). */
+export function fromYear(x: number): number {
+  const y = Math.floor(x);
+  return Date.UTC(y, 0, 1) + (x - y) * YEAR_MS;
+}
+
+/** Ordinary least squares fit of ys on xs. */
+export function linearFit(xs: number[], ys: number[]): LinearFit {
+  const n = xs.length;
+  const mx = xs.reduce((s, x) => s + x, 0) / n;
+  const my = ys.reduce((s, y) => s + y, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    sxy += (xs[i] - mx) * (ys[i] - my);
+    sxx += (xs[i] - mx) ** 2;
+    syy += (ys[i] - my) ** 2;
+  }
+  const slope = sxy / sxx;
+  return { slope, intercept: my - slope * mx, r2: (sxy * sxy) / (sxx * syy), n };
+}
+
+export const evaluate = (fit: LinearFit, x: number) => fit.intercept + fit.slope * x;
+
+/** Where the fit reaches y, or null if it never does going forward. */
+export const solve = (fit: LinearFit, y: number) => (fit.slope > 0 ? (y - fit.intercept) / fit.slope : null);
+
+/** Predicted METR 50% time horizon, in minutes, for a model with this ECI. */
+export const horizonMinutes = (horizon: LinearFit, eci: number) => 2 ** evaluate(horizon, eci);
+
+/**
+ * Models that scored higher than every model released before them, from FRONTIER_START_DATE on.
+ * Models released the same day compete with each other; only the best can set the record.
+ */
+export function frontierModels(eciRows: Row[]): FrontierPoint[] {
+  const num = (v: string | undefined) => (v === undefined || v.trim() === "" ? null : Number(v));
+  const models = eciRows
+    .map((r) => ({
+      name: r["Display name"] || r["Model"],
+      key: r["Model"],
+      org: r["Organization"],
+      date: DATE_OVERRIDES[r["Model"]] ?? r["date"],
+      eci: num(r["eci"]),
+      lo: num(r["eci_ci_low"]),
+      hi: num(r["eci_ci_high"]),
+    }))
+    .filter((m): m is typeof m & { eci: number } => m.eci !== null && Number.isFinite(m.eci) && /^\d{4}-\d{2}-\d{2}$/.test(m.date))
+    .filter((m) => m.date >= FRONTIER_START_DATE)
+    .sort((a, b) => a.date.localeCompare(b.date) || b.eci - a.eci);
+
+  const frontier: FrontierPoint[] = [];
+  for (const m of models) {
+    if (frontier.length && m.eci <= frontier[frontier.length - 1].eci) continue;
+    frontier.push({ name: m.name, org: m.org, date: m.date, eci: m.eci, lo: m.lo, hi: m.hi, label: LABELLED_MODELS.includes(m.key) });
+  }
+  if (frontier.length) {
+    frontier[0].label = true;
+    frontier[frontier.length - 1].label = true;
+  }
+  return frontier;
+}
+
+/**
+ * log2(METR 50% time horizon) regressed on ECI. One point per model that has both: METR rows
+ * are matched to ECI models through Epoch's model metadata, and a model with several
+ * measurements uses its PREFERRED_METR_VERSION one, else its longest.
+ */
+export function horizonFit(eciRows: Row[], metrRows: Row[], metadataRows: Row[]): LinearFit {
+  const eciByModel = new Map(eciRows.map((r) => [r["Model"], Number(r["eci"])]));
+  const metadata = new Map(metadataRows.map((r) => [r["model_version"], r]));
+
+  const byModel = new Map<string, Row[]>();
+  for (const r of metrRows) {
+    const meta = metadata.get(r["Model version"]);
+    if (!meta) continue;
+    const key = eciByModel.has(meta["model_group"]) ? meta["model_group"] : eciByModel.has(meta["display_name"]) ? meta["display_name"] : null;
+    if (key === null) continue;
+    if (!byModel.has(key)) byModel.set(key, []);
+    byModel.get(key)!.push(r);
+  }
+
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const [key, rows] of byModel) {
+    const usable = rows.filter((r) => Number(r["Time horizon"]) > 0);
+    if (!usable.length) continue;
+    const pick =
+      usable.find((r) => r["METR version"] === PREFERRED_METR_VERSION) ??
+      usable.reduce((a, b) => (Number(b["Time horizon"]) > Number(a["Time horizon"]) ? b : a));
+    const eci = eciByModel.get(key)!;
+    if (!Number.isFinite(eci)) continue;
+    xs.push(eci);
+    ys.push(Math.log2(Number(pick["Time horizon"])));
+  }
+  return linearFit(xs, ys);
+}
+
+/** The full page model from Epoch's raw CSV text. */
+export function buildForecast(csv: { eci: string; metr: string; metadata: string }): Forecast {
+  const eciRows = parseCsv(csv.eci);
+  const points = frontierModels(eciRows);
+  const trend = linearFit(
+    points.map((p) => toYear(p.date)),
+    points.map((p) => p.eci),
+  );
+  const horizon = horizonFit(eciRows, parseCsv(csv.metr), parseCsv(csv.metadata));
+  const milestones = MILESTONES.map(({ label, eci }) => {
+    const year = solve(trend, eci);
+    return { label, eci, date: year === null ? null : Math.round(fromYear(year)) };
+  });
+  return { points, trend, horizon, milestones };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Formatting
+// ---------------------------------------------------------------------------------------------
+
+export function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${Math.round(minutes)} min`;
+  const h = minutes / 60;
+  if (h < 24) return h < 10 ? `${h.toFixed(1)} h` : `${Math.round(h)} h`;
+  const d = h / 24;
+  const days = d < 10 ? d.toFixed(1) : String(Math.round(d));
+  return `${days} ${days === "1.0" ? "day" : "days"}`;
+}
+
+/**
+ * Time from `now` until `target` as [value, unit] pairs: whole calendar years (only once there is
+ * at least one), then days, hours, minutes and seconds. Empty once the target has passed.
+ */
+export function countdownParts(now: number, target: number): [string, string][] {
+  if (target <= now) return [];
+  const addYears = (t: number, years: number) => {
+    const d = new Date(t);
+    d.setUTCFullYear(d.getUTCFullYear() + years);
+    return d.getTime();
+  };
+  let years = 0;
+  while (addYears(now, years + 1) <= target) years++;
+  let left = Math.floor((target - addYears(now, years)) / 1000);
+  const days = Math.floor(left / 86400);
+  left %= 86400;
+  const pad = (v: number) => String(v).padStart(2, "0");
+  return [
+    ...(years > 0 ? [[String(years), "y"] as [string, string]] : []),
+    [String(days), "d"],
+    [pad(Math.floor(left / 3600)), "h"],
+    [pad(Math.floor((left % 3600) / 60)), "m"],
+    [pad(left % 60), "s"],
+  ];
+}
+
+// ---------------------------------------------------------------------------------------------
+// CSV
+// ---------------------------------------------------------------------------------------------
+
+/** RFC 4180 CSV → rows keyed by header (quoted fields may contain commas, quotes and newlines). */
+export function parseCsv(text: string): Row[] {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (c === '"') quoted = false;
+      else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") {
+      record.push(field);
+      field = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      record.push(field);
+      records.push(record);
+      record = [];
+      field = "";
+    } else field += c;
+  }
+  if (field !== "" || record.length) {
+    record.push(field);
+    records.push(record);
+  }
+  const [header, ...rows] = records.filter((r) => r.length > 1 || r[0] !== "");
+  if (!header) return [];
+  const keys = header.map((h) => h.replace(/^﻿/, "").trim());
+  return rows.map((r) => Object.fromEntries(keys.map((k, i) => [k, r[i] ?? ""])));
+}
