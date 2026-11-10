@@ -4,7 +4,7 @@ import eciCsv from "@/data/epoch/eci_scores.csv?raw";
 import metrCsv from "@/data/epoch/metr_time_horizons_external.csv?raw";
 import metadataCsv from "@/data/epoch/model_metadata.csv?raw";
 import source from "@/data/epoch/source.json";
-import { buildForecast } from "@/scripts/ai-frontier-forecast-model";
+import { buildForecast, formatDuration, formatEciRate, horizonMinutes, toYear, trendRate, trendSlopeAt } from "@/scripts/ai-frontier-forecast-model";
 
 // Computed at build time from Epoch's raw data; refresh it with `npm run update:epoch`.
 const model = buildForecast({ eci: eciCsv, metr: metrCsv, metadata: metadataCsv });
@@ -25,15 +25,16 @@ const colors = Object.fromEntries([...orgsPresent].map((org) => [org, ORG_COLORS
 
 const fmtLongDate = (ms: number) =>
   new Date(ms).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+const trendName = model.trend.kind === "exponential" ? "exponential" : "linear";
 const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
 ---
 
 <Layout title="AI Frontier Forecast - Jasper Morgal">
   <h1>AI Frontier Forecast</h1>
   <p class="lede">
-    This chart graphs every model to push the ECI frontier forward. A linear regression is run over these models and their
+    This chart graphs every model to push the ECI frontier forward. {trendName === "exponential" ? "An" : "A"} {trendName} regression is run over these models and their
     release dates to predict the consistent trend of increasing ECI. The milestone dates are ECI thresholds from the
-    <a href="https://www.aifuturesmodel.com/">AI Futures Model</a>, which this page attempts to concretely predict using only
+    <a href="https://www.aifuturesmodel.com/" target="_blank" rel="noopener">AI Futures Model</a>, which this page attempts to concretely predict using only
     current ECI data.
   </p>
 
@@ -44,12 +45,20 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
           <div class="ms-label">{m.label}</div>
           <div class="ms-date">{m.date === null ? "Not on current trend" : fmtLongDate(m.date)}</div>
           <div class="ms-countdown" aria-live="off">&nbsp;</div>
-          <div class="ms-eci">ECI {m.eci}</div>
+          <div class="ms-eci">ECI {m.eci} • ~{formatDuration(horizonMinutes(model.horizon, m.eci))}</div>
         </div>
       ))
     }
   </div>
-  <p class="trend-note">Frontier trend: {model.trend.slope >= 0 ? "+" : ""}{model.trend.slope.toFixed(1)} ECI / year</p>
+  <p class="trend-note">
+    Frontier trend: {model.trend.kind === "exponential" ? "ECI " : ""}{trendRate(model.trend)}{
+      model.trend.kind === "exponential" && (
+        <>
+          {" · "}currently <span id="current-rate">{formatEciRate(trendSlopeAt(model.trend, toYear(Date.now())))}</span>
+        </>
+      )
+    }
+  </p>
 
   <figure class="viz">
     <ul class="legend" aria-label="Legend">
@@ -62,10 +71,10 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
         ))
       }
       <li><span class="key-line key-step"></span>Frontier</li>
-      <li><span class="key-line key-trend"></span>Linear trend</li>
+      <li><span class="key-line key-trend"></span>{trendName === "exponential" ? "Exponential" : "Linear"} trend</li>
     </ul>
     <div class="chart" id="chart">
-      <svg id="chart-svg" role="img" aria-label="Frontier ECI score by model release date, with a linear trend line"></svg>
+      <svg id="chart-svg" role="img" aria-label={`Frontier ECI score by model release date, with ${trendName === "exponential" ? "an exponential" : "a linear"} trend line`}></svg>
       <div class="tooltip" id="tooltip" hidden>
         <div class="tt-name"><span class="tt-key" id="tt-key"></span><span id="tt-name"></span></div>
         <div class="tt-meta" id="tt-meta"></div>
@@ -80,7 +89,7 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
   </figure>
 
   <p class="source">
-    Data: <a href="https://epoch.ai/eci?view=graph&tab=release-date">Epoch AI, Capabilities Index</a> (CC BY 4.0), retrieved {source.retrieved}.
+    Data: <a href="https://epoch.ai/eci?view=graph&tab=release-date" target="_blank" rel="noopener">Epoch AI, Capabilities Index</a> (CC BY 4.0), retrieved {source.retrieved}.
   </p>
 
   <script type="application/json" id="eci-data" set:html={pageData} />
@@ -389,17 +398,31 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
   </style>
 
   <script>
-    import { countdownParts, evaluate, formatDuration, horizonMinutes, toYear, type Forecast } from "@/scripts/ai-frontier-forecast-model";
+    import {
+      countdownParts,
+      formatDuration,
+      formatEciRate,
+      horizonMinutes,
+      toYear,
+      trendAt as trendEci,
+      trendRate,
+      trendSlopeAt,
+      type Forecast,
+    } from "@/scripts/ai-frontier-forecast-model";
 
     const data: Forecast & { colors: Record<string, string> } = JSON.parse(document.getElementById("eci-data")!.textContent!);
     const { trend, horizon, colors } = data;
     const points = data.points.map((p) => ({ ...p, x: toYear(p.date) }));
     const n = points.length;
-    const trendAt = (x: number) => evaluate(trend, x);
+    const trendAt = (x: number) => trendEci(trend, x);
 
     const SVG_NS = "http://www.w3.org/2000/svg";
     const fmtDate = (iso: string) =>
       new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+
+    // Current trend rate, recomputed for today (the build-time value goes stale between deploys)
+    const currentRate = document.getElementById("current-rate");
+    if (currentRate) currentRate.textContent = formatEciRate(trendSlopeAt(trend, toYear(Date.now())));
 
     // Countdowns to the milestone dates rendered at build time
     const countdowns = [...document.querySelectorAll<HTMLElement>(".milestone")]
@@ -486,24 +509,31 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
       // Crosshair (hidden until hover)
       const crosshair = el("line", { class: "crosshair", y1: m.top, y2: m.top + ih, visibility: "hidden" }, svg);
 
-      // Trend line: solid-dash across the data, fainter extension to the chart edges
+      // Trend line (sampled, so curved fits draw correctly): solid-dash across the data, fainter extension to the chart edges
       const xa = points[0].x;
       const xb = points[n - 1].x;
       const clip = el("clipPath", { id: "plot-clip" }, el("defs", {}, svg));
       el("rect", { x: m.left, y: m.top, width: iw, height: ih }, clip);
       const trendLayer = el("g", { "clip-path": "url(#plot-clip)" }, svg);
-      const seg = (x1: number, x2: number, cls: string) =>
-        el("line", { class: cls, x1: sx(x1), y1: sy(trendAt(x1)), x2: sx(x2), y2: sy(trendAt(x2)) }, trendLayer);
+      const seg = (x1: number, x2: number, cls: string) => {
+        const steps = Math.max(1, Math.ceil(Math.abs(x2 - x1) * 24));
+        let path = "";
+        for (let k = 0; k <= steps; k++) {
+          const x = x1 + ((x2 - x1) * k) / steps;
+          path += `${k ? "L" : "M"}${sx(x).toFixed(1)},${sy(trendAt(x)).toFixed(1)}`;
+        }
+        el("path", { class: cls, d: path, fill: "none" }, trendLayer);
+      };
       seg(X0, xa, "trend trend-ext");
       seg(xa, xb, "trend");
       seg(xb, X1, "trend trend-ext");
 
       if (!narrow) {
         const lx = xa + 0.23 * (xb - xa);
-        const angle = (Math.atan2(sy(trendAt(lx + 1)) - sy(trendAt(lx)), sx(lx + 1) - sx(lx)) * 180) / Math.PI;
+        const angle = (Math.atan2(sy(trendAt(lx + 0.01)) - sy(trendAt(lx)), sx(lx + 0.01) - sx(lx)) * 180) / Math.PI;
         const ly = sy(trendAt(lx)) - 10;
         const tl = el("text", { class: "trend-label", x: sx(lx), y: ly, transform: `rotate(${angle} ${sx(lx)} ${ly})` }, svg);
-        tl.textContent = `${trend.slope >= 0 ? "+" : ""}${trend.slope.toFixed(1)} ECI / year`;
+        tl.textContent = trendRate(trend);
       }
 
       // Frontier staircase: holds each record until the next one beats it

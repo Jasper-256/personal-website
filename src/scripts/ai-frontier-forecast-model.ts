@@ -14,6 +14,14 @@
 export const FRONTIER_START_DATE = "2023-03-14";
 
 /**
+ * Models left out of the frontier. OpenAI's Pro tiers (GPT-5 Pro, GPT-5.2 Pro, o3-pro, ...) are
+ * the same models as their base versions run with much more parallel test-time compute, so they
+ * mark a pricier inference setting rather than a new model, and they'd otherwise claim most of
+ * OpenAI's records. Matched by name so future Pro releases are excluded automatically.
+ */
+export const EXCLUDED_MODELS: RegExp[] = [/^GPT-[\d.]+ Pro\b/i, /^o\d+-pro\b/i];
+
+/**
  * Release dates that replace Epoch's. Keep these when refreshing the data.
  *
  * GPT-4 Turbo (Nov 2023): Epoch dates this model family 2024-01-25 because it folds in
@@ -26,12 +34,25 @@ export const DATE_OVERRIDES: Record<string, string> = {
 };
 
 /** Frontier models that get a direct label on wide screens (the first and latest always do). */
-export const LABELLED_MODELS = ["o1", "GPT-5"];
+export const LABELLED_MODELS = ["o1-mini", "GPT-5", "Claude Fable 5"];
 
-/** ECI levels whose date on the trend line is shown, with a countdown, at the top of the page. */
+/**
+ * How the frontier is extrapolated. "exponential" fits ln(ECI) linearly on release date
+ * (constant % growth per year); "linear" fits ECI itself (constant points per year). The trend
+ * line, milestone dates and page text all follow this setting.
+ */
+export const TREND_KIND: TrendKind = "linear";
+
+/**
+ * ECI levels whose date on the trend line is shown, with a countdown, at the top of the page.
+ *
+ * Thresholds are the AI Futures Model's (https://www.aifuturesmodel.com/): the model's simulated
+ * ECI at the date its default forecast reaches each milestone. On the site as of 2026-11-10, its
+ * default run reaches Automated Coder at ECI ~182.4 and Superhuman AI Researcher at ~198.1.
+ */
 export const MILESTONES = [
   { label: "Automated Coder", eci: 183 },
-  { label: "Superintelligence", eci: 241 },
+  { label: "Superhuman AI Researcher", eci: 198 },
 ];
 
 /** METR suite preferred when a model has several time-horizon measurements. */
@@ -59,6 +80,14 @@ export interface LinearFit {
   n: number;
 }
 
+export type TrendKind = "linear" | "exponential";
+
+/** A fit of ECI on decimal year. For "exponential", `fit` is of ln(ECI), so ECI = e^(intercept + slope * year). */
+export interface Trend {
+  kind: TrendKind;
+  fit: LinearFit;
+}
+
 export interface Milestone {
   label: string;
   eci: number;
@@ -69,7 +98,7 @@ export interface Milestone {
 export interface Forecast {
   points: FrontierPoint[];
   /** ECI as a function of decimal year (see `toYear`). */
-  trend: LinearFit;
+  trend: Trend;
   /** log2(50% time horizon in minutes) as a function of ECI. */
   horizon: LinearFit;
   milestones: Milestone[];
@@ -118,6 +147,30 @@ export const evaluate = (fit: LinearFit, x: number) => fit.intercept + fit.slope
 /** Where the fit reaches y, or null if it never does going forward. */
 export const solve = (fit: LinearFit, y: number) => (fit.slope > 0 ? (y - fit.intercept) / fit.slope : null);
 
+/** Fit the frontier trend: ECI (or ln ECI) on decimal year. */
+export function fitTrend(kind: TrendKind, years: number[], ecis: number[]): Trend {
+  return { kind, fit: linearFit(years, kind === "exponential" ? ecis.map(Math.log) : ecis) };
+}
+
+/** Trend ECI at a decimal year. */
+export const trendAt = (t: Trend, year: number) => (t.kind === "exponential" ? Math.exp(evaluate(t.fit, year)) : evaluate(t.fit, year));
+
+/** Decimal year when the trend reaches `eci`, or null if it never does going forward. */
+export const trendYear = (t: Trend, eci: number) =>
+  t.kind === "exponential" ? (eci > 0 ? solve(t.fit, Math.log(eci)) : null) : solve(t.fit, eci);
+
+/** Growth rate of the trend, e.g. "+11.4% / year" or "+15.6 ECI / year". */
+export function trendRate(t: Trend): string {
+  const rate = t.kind === "exponential" ? (Math.exp(t.fit.slope) - 1) * 100 : t.fit.slope;
+  return `${rate >= 0 ? "+" : ""}${rate.toFixed(1)}${t.kind === "exponential" ? "%" : " ECI"} / year`;
+}
+
+/** Instantaneous ECI points per year on the trend at a decimal year (constant for a linear trend). */
+export const trendSlopeAt = (t: Trend, year: number) => (t.kind === "exponential" ? t.fit.slope * trendAt(t, year) : t.fit.slope);
+
+/** e.g. "+18.5 ECI / year". */
+export const formatEciRate = (rate: number) => `${rate >= 0 ? "+" : ""}${rate.toFixed(1)} ECI / year`;
+
 /** Predicted METR 50% time horizon, in minutes, for a model with this ECI. */
 export const horizonMinutes = (horizon: LinearFit, eci: number) => 2 ** evaluate(horizon, eci);
 
@@ -139,6 +192,7 @@ export function frontierModels(eciRows: Row[]): FrontierPoint[] {
     }))
     .filter((m): m is typeof m & { eci: number } => m.eci !== null && Number.isFinite(m.eci) && /^\d{4}-\d{2}-\d{2}$/.test(m.date))
     .filter((m) => m.date >= FRONTIER_START_DATE)
+    .filter((m) => !EXCLUDED_MODELS.some((re) => re.test(m.key)))
     .sort((a, b) => a.date.localeCompare(b.date) || b.eci - a.eci);
 
   const frontier: FrontierPoint[] = [];
@@ -192,13 +246,14 @@ export function horizonFit(eciRows: Row[], metrRows: Row[], metadataRows: Row[])
 export function buildForecast(csv: { eci: string; metr: string; metadata: string }): Forecast {
   const eciRows = parseCsv(csv.eci);
   const points = frontierModels(eciRows);
-  const trend = linearFit(
+  const trend = fitTrend(
+    TREND_KIND,
     points.map((p) => toYear(p.date)),
     points.map((p) => p.eci),
   );
   const horizon = horizonFit(eciRows, parseCsv(csv.metr), parseCsv(csv.metadata));
   const milestones = MILESTONES.map(({ label, eci }) => {
-    const year = solve(trend, eci);
+    const year = trendYear(trend, eci);
     return { label, eci, date: year === null ? null : Math.round(fromYear(year)) };
   });
   return { points, trend, horizon, milestones };
@@ -213,8 +268,13 @@ export function formatDuration(minutes: number): string {
   const h = minutes / 60;
   if (h < 24) return h < 10 ? `${h.toFixed(1)} h` : `${Math.round(h)} h`;
   const d = h / 24;
-  const days = d < 10 ? d.toFixed(1) : String(Math.round(d));
-  return `${days} ${days === "1.0" ? "day" : "days"}`;
+  if (d < 365) {
+    const days = d < 10 ? d.toFixed(1) : String(Math.round(d));
+    return `${days} ${days === "1.0" ? "day" : "days"}`;
+  }
+  const y = d / 365.2425;
+  const years = y < 10 ? y.toFixed(1) : Math.round(y).toLocaleString("en-US");
+  return `${years} ${years === "1.0" ? "year" : "years"}`;
 }
 
 /**
