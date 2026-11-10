@@ -6,7 +6,7 @@
     "node": ">=26.10.0"
   },
   "scripts": {
-    "dev": "astro dev",
+    "dev": "astro dev --host 0.0.0.0",
     "build": "astro build",
     "check": "astro sync && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
     "cf:dev": "npm run build && wrangler dev",
