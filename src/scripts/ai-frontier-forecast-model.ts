@@ -30,8 +30,8 @@ export const LABELLED_MODELS = ["o1", "GPT-5"];
 
 /** ECI levels whose date on the trend line is shown, with a countdown, at the top of the page. */
 export const MILESTONES = [
-  { label: "Automated coder", eci: 183 },
-  { label: "Artificial superintelligence", eci: 241 },
+  { label: "Automated Coder", eci: 183 },
+  { label: "Superintelligence", eci: 241 },
 ];
 
 /** METR suite preferred when a model has several time-horizon measurements. */
