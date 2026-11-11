@@ -47,12 +47,15 @@ export const TREND_KIND: TrendKind = "linear";
  * ECI levels whose date on the trend line is shown, with a countdown, at the top of the page.
  *
  * Thresholds are the AI Futures Model's (https://www.aifuturesmodel.com/): the model's simulated
- * ECI at the date its default forecast reaches each milestone. On the site as of 2026-11-10, its
- * default run reaches Automated Coder at ECI ~182.4 and Superhuman AI Researcher at ~198.1.
+ * ECI at the date it reaches each milestone. These come from the Q3.5 timelines update run
+ * (https://blog.aifutures.org/p/q35-timelines-update-looks-like-the), linked from the post as
+ * https://www.aifuturesmodel.com/p?v=2&base=eli-08-16-26&ed=q3.5&rcl=-0.5&suard=7.052322627593112&eudt=3.0130366136756046&ila=60&icaec=1.5
+ * As of 2026-11-10 it reaches Superhuman AI Researcher at ECI ~181.1 (Apr 2027) and Top Expert
+ * Dominating AI (TED-AI) at ~206.9 (Jun 2027).
  */
 export const MILESTONES = [
-  { label: "Automated Coder", eci: 183 },
-  { label: "Superhuman AI Researcher", eci: 198 },
+  { label: "Superhuman AI Researcher", eci: 181 },
+  { label: "Top Expert Dominating AI", eci: 207 },
 ];
 
 /** METR suite preferred when a model has several time-horizon measurements. */
