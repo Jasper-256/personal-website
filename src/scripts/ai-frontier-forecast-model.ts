@@ -34,7 +34,45 @@ export const DATE_OVERRIDES: Record<string, string> = {
 };
 
 /** Frontier models that get a direct label on wide screens (the first and latest always do). */
-export const LABELLED_MODELS = ["o1-mini", "GPT-5", "Claude Fable 5"];
+export const LABELLED_MODELS = ["GPT-3", "GPT-3.5 (text-davinci-002)", "GPT-4 (Mar 2023)", "Claude 3 Opus", "o1-mini", "GPT-5", "Claude Fable 5"];
+
+/**
+ * Only publicly available models are charted: models with these Epoch "Model accessibility" values
+ * are left out (and so can't set a record). Kept: API access, open weights, hosted apps without an
+ * API, and "Unknown" (mostly hosted Chinese models and PaLM 2, all publicly usable).
+ */
+export const EXCLUDED_ACCESS = ["Unreleased", "Limited access"];
+
+/**
+ * Record-setting models from before Epoch's index (it starts in Feb 2023), with estimated scores.
+ * They join the frontier and the trend fit like any other model and ignore FRONTIER_START_DATE.
+ * Replace an entry once Epoch publishes a real score for it.
+ *
+ * Method: Epoch's benchmark archive has older scores (MMLU, HellaSwag, PIQA, BoolQ, WinoGrande,
+ * ARC, OpenBookQA, LAMBADA, TriviaQA, GSM8K). For each benchmark, ECI was regressed on the
+ * chance-adjusted logit of the score across models Epoch does score, then each old model's
+ * per-benchmark predictions were averaged, weighted by each fit's precision. Checked against real
+ * scores: LLaMA-7B/13B/33B/65B, GPT-4 and GPT-3.5 Turbo come out within ~4 points. lo/hi are
+ * roughly ±1 standard error. Judgment calls on top of that:
+ *
+ * - GPT-3: the benchmarks give ~76 without MMLU; its paper's MMLU (43.9) implies ~85, and the LLaMA
+ *   paper puts it between LLaMA-7B (78.3) and LLaMA-13B (86.1), so ~80.
+ * - InstructGPT (text-davinci-001, 2022-01-27, ~94) is the first public model past GPT-3. Gopher
+ *   (Dec 2021, ~97), Megatron-Turing NLG, GLaM, Chinchilla and PaLM were all stronger or close but
+ *   never released; Gopher stays listed so it reappears if EXCLUDED_ACCESS changes.
+ * - GPT-3.5 starts with text-davinci-002 (2022-03-15, ~106), level with or just above Chinchilla
+ *   (~102) and PaLM 540B (~104). ChatGPT (text-davinci-003 level, ~107) edges past it.
+ * - T5 is skipped: its only scores are fine-tuned results, which overstate it.
+ * - Flan-PaLM (Oct 2022, MMLU 75) may have led late 2022 but isn't in Epoch's data.
+ */
+export const ESTIMATED_MODELS: { name: string; org: string; date: string; eci: number; lo: number; hi: number; access: string }[] = [
+  { name: "GPT-2", org: "OpenAI", date: "2019-11-05", eci: 49, lo: 45, hi: 53, access: "Open weights (unrestricted)" },
+  { name: "GPT-3", org: "OpenAI", date: "2020-05-28", eci: 80, lo: 75, hi: 85, access: "API access" },
+  { name: "Gopher", org: "Google DeepMind", date: "2021-12-08", eci: 97, lo: 93, hi: 101, access: "Unreleased" },
+  { name: "InstructGPT (text-davinci-001)", org: "OpenAI", date: "2022-01-27", eci: 94, lo: 91, hi: 98, access: "API access" },
+  { name: "GPT-3.5 (text-davinci-002)", org: "OpenAI", date: "2022-03-15", eci: 106, lo: 102, hi: 110, access: "API access" },
+  { name: "ChatGPT", org: "OpenAI", date: "2022-11-30", eci: 107, lo: 101, hi: 113, access: "Hosted access (no API)" },
+];
 
 /**
  * How the frontier is extrapolated. "exponential" fits ln(ECI) linearly on release date
@@ -58,6 +96,9 @@ export const MILESTONES = [
   { label: "Top Expert Dominating AI", eci: 207 },
 ];
 
+/** Where the chart's "Modern" zoom starts. Display only: the data and trend fit are unchanged. */
+export const MODERN_VIEW_START = "2024-01-01";
+
 /** METR suite preferred when a model has several time-horizon measurements. */
 const PREFERRED_METR_VERSION = "METR-Horizon-v1.1";
 
@@ -73,6 +114,8 @@ export interface FrontierPoint {
   lo: number | null;
   hi: number | null;
   label: boolean;
+  /** Hand-estimated score (see ESTIMATED_MODELS), not from Epoch. */
+  estimated: boolean;
 }
 
 /** y = intercept + slope * x */
@@ -178,7 +221,8 @@ export const formatEciRate = (rate: number) => `${rate >= 0 ? "+" : ""}${rate.to
 export const horizonMinutes = (horizon: LinearFit, eci: number) => 2 ** evaluate(horizon, eci);
 
 /**
- * Models that scored higher than every model released before them, from FRONTIER_START_DATE on.
+ * Models that scored higher than every model released before them, from FRONTIER_START_DATE on
+ * (plus ESTIMATED_MODELS, whatever their date). Models with an EXCLUDED_ACCESS level are skipped.
  * Models released the same day compete with each other; only the best can set the record.
  */
 export function frontierModels(eciRows: Row[]): FrontierPoint[] {
@@ -188,6 +232,7 @@ export function frontierModels(eciRows: Row[]): FrontierPoint[] {
       name: r["Display name"] || r["Model"],
       key: r["Model"],
       org: r["Organization"],
+      access: r["Model accessibility"],
       date: DATE_OVERRIDES[r["Model"]] ?? r["date"],
       eci: num(r["eci"]),
       lo: num(r["eci_ci_low"]),
@@ -196,12 +241,24 @@ export function frontierModels(eciRows: Row[]): FrontierPoint[] {
     .filter((m): m is typeof m & { eci: number } => m.eci !== null && Number.isFinite(m.eci) && /^\d{4}-\d{2}-\d{2}$/.test(m.date))
     .filter((m) => m.date >= FRONTIER_START_DATE)
     .filter((m) => !EXCLUDED_MODELS.some((re) => re.test(m.key)))
+    .map((m) => ({ ...m, estimated: false }))
+    .concat(ESTIMATED_MODELS.map((e) => ({ ...e, key: e.name, estimated: true })))
+    .filter((m) => !EXCLUDED_ACCESS.includes(m.access))
     .sort((a, b) => a.date.localeCompare(b.date) || b.eci - a.eci);
 
   const frontier: FrontierPoint[] = [];
   for (const m of models) {
     if (frontier.length && m.eci <= frontier[frontier.length - 1].eci) continue;
-    frontier.push({ name: m.name, org: m.org, date: m.date, eci: m.eci, lo: m.lo, hi: m.hi, label: LABELLED_MODELS.includes(m.key) });
+    frontier.push({
+      name: m.name,
+      org: m.org,
+      date: m.date,
+      eci: m.eci,
+      lo: m.lo,
+      hi: m.hi,
+      label: LABELLED_MODELS.includes(m.key),
+      estimated: m.estimated,
+    });
   }
   if (frontier.length) {
     frontier[0].label = true;
@@ -266,17 +323,20 @@ export function buildForecast(csv: { eci: string; metr: string; metadata: string
 // Formatting
 // ---------------------------------------------------------------------------------------------
 
+/** A duration in the largest fitting unit (sec, min, h, days, years); single-digit values get one decimal. */
 export function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${Math.round(minutes)} min`;
+  const num = (v: number) => (Number(v.toFixed(1)) < 10 ? v.toFixed(1) : Math.round(v).toLocaleString("en-US"));
+  if (minutes * 60 < 0.05) return "<0.1 sec";
+  if (minutes < 1) return `${num(minutes * 60)} sec`;
+  if (minutes < 60) return `${num(minutes)} min`;
   const h = minutes / 60;
-  if (h < 24) return h < 10 ? `${h.toFixed(1)} h` : `${Math.round(h)} h`;
+  if (h < 24) return `${num(h)} h`;
   const d = h / 24;
   if (d < 365) {
-    const days = d < 10 ? d.toFixed(1) : String(Math.round(d));
+    const days = num(d);
     return `${days} ${days === "1.0" ? "day" : "days"}`;
   }
-  const y = d / 365.2425;
-  const years = y < 10 ? y.toFixed(1) : Math.round(y).toLocaleString("en-US");
+  const years = num(d / 365.2425);
   return `${years} ${years === "1.0" ? "year" : "years"}`;
 }
 
