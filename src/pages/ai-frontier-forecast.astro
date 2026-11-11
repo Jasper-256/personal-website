@@ -7,7 +7,13 @@ import source from "@/data/epoch/source.json";
 import { buildForecast, formatDuration, formatEciRate, horizonMinutes, toYear, trendRate, trendSlopeAt } from "@/scripts/ai-frontier-forecast-model";
 
 // Computed at build time from Epoch's raw data; refresh it with `npm run update:epoch`.
-const model = buildForecast({ eci: eciCsv, metr: metrCsv, metadata: metadataCsv });
+// Older benchmark scores, keyed by file stem (e.g. "mmlu"), for estimating pre-2023 models
+const benchmarkCsvs = Object.fromEntries(
+  Object.entries(import.meta.glob<string>("../data/epoch/benchmarks/*_external.csv", { query: "?raw", import: "default", eager: true })).map(
+    ([path, text]) => [path.replace(/^.*\/(.+)_external\.csv$/, "$1"), text],
+  ),
+);
+const model = buildForecast({ eci: eciCsv, metr: metrCsv, metadata: metadataCsv, benchmarks: benchmarkCsvs });
 
 // Lab colors (validated categorical slots). Labs without a slot share the neutral "other" color.
 const ORG_COLORS: Record<string, string> = {

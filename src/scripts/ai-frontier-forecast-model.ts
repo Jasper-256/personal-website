@@ -37,10 +37,12 @@ export const DATE_OVERRIDES: Record<string, string> = {
   "GPT-4 Turbo (Nov 2023)": "2023-11-06",
   "Claude 3 Opus": "2024-03-04",
   "Gemini 2.5 Pro (Mar 2025)": "2025-03-25",
+  // API launch (private beta), rather than the paper date: https://openai.com/index/openai-api/
+  "GPT-3 175B (davinci)": "2020-06-11",
 };
 
 /** Frontier models that get a direct label on wide screens (the first and latest always do). */
-export const LABELLED_MODELS = ["GPT-3", "GPT-3.5 (text-davinci-002)", "GPT-4 (Mar 2023)", "Claude 3 Opus", "o1-mini", "GPT-5", "Claude Fable 5"];
+export const LABELLED_MODELS = ["GPT-3 175B (davinci)", "davinci-002", "GPT-4 (Mar 2023)", "Claude 3 Opus", "o1-mini", "GPT-5", "Claude Fable 5"];
 
 /**
  * Only publicly available models are charted: models with these Epoch "Model accessibility" values
@@ -50,36 +52,49 @@ export const LABELLED_MODELS = ["GPT-3", "GPT-3.5 (text-davinci-002)", "GPT-4 (M
 export const EXCLUDED_ACCESS = ["Unreleased", "Limited access"];
 
 /**
- * Record-setting models from before Epoch's index (it starts in Feb 2023), with estimated scores.
- * They join the frontier and the trend fit like any other model and ignore FRONTIER_START_DATE.
- * Replace an entry once Epoch publishes a real score for it.
+ * Models from before Epoch's index (it starts in Feb 2023) get an ECI estimated from the older
+ * benchmark scores in Epoch's archive (src/data/epoch/benchmarks/). For each benchmark, ECI is
+ * regressed on the chance-adjusted logit of the score across models Epoch does score; an old
+ * model's estimate is the precision-weighted mean of its per-benchmark predictions, and lo/hi are
+ * ±1 standard error. Applied to models Epoch does score (LLaMA-7B to 65B, GPT-4, GPT-3.5 Turbo)
+ * this lands within ~4 points. Estimated models join the frontier and the trend fit like any
+ * other, and the usual frontier rules decide which of them set records.
  *
- * Method: Epoch's benchmark archive has older scores (MMLU, HellaSwag, PIQA, BoolQ, WinoGrande,
- * ARC, OpenBookQA, LAMBADA, TriviaQA, GSM8K). For each benchmark, ECI was regressed on the
- * chance-adjusted logit of the score across models Epoch does score, then each old model's
- * per-benchmark predictions were averaged, weighted by each fit's precision. Checked against real
- * scores: LLaMA-7B/13B/33B/65B, GPT-4 and GPT-3.5 Turbo come out within ~4 points. lo/hi are
- * roughly ±1 standard error. Judgment calls on top of that:
- *
- * - GPT-3: the benchmarks give ~76 without MMLU; its paper's MMLU (43.9) implies ~85, and the LLaMA
- *   paper puts it between LLaMA-7B (78.3) and LLaMA-13B (86.1), so ~80.
- * - InstructGPT (text-davinci-001, 2022-01-27, ~94) is the first public model past GPT-3. Gopher
- *   (Dec 2021, ~97), Megatron-Turing NLG, GLaM, Chinchilla and PaLM were all stronger or close but
- *   never released; Gopher stays listed so it reappears if EXCLUDED_ACCESS changes.
- * - GPT-3.5 starts with text-davinci-002 (2022-03-15, ~106), level with or just above Chinchilla
- *   (~102) and PaLM 540B (~104). ChatGPT (text-davinci-003 level, ~107) edges past it.
- * - T5 is skipped: its only scores are fine-tuned results, which overstate it.
- * - Flan-PaLM (Oct 2022, MMLU 75) may have led late 2022 but isn't in Epoch's data.
+ * Each entry: the archive file stem, its score column, and the score a random guess gets.
  */
-export const ESTIMATED_MODELS: { name: string; org: string; date: string; eci: number; lo: number; hi: number; access: string }[] = [
-  { name: "GPT-2", org: "OpenAI", date: "2019-11-05", eci: 49, lo: 45, hi: 53, access: "Open weights (unrestricted)" },
-  // API launch (private beta), rather than the paper date: https://openai.com/index/openai-api/
-  { name: "GPT-3", org: "OpenAI", date: "2020-06-11", eci: 80, lo: 75, hi: 85, access: "API access" },
-  { name: "Gopher", org: "Google DeepMind", date: "2021-12-08", eci: 97, lo: 93, hi: 101, access: "Unreleased" },
-  { name: "InstructGPT (text-davinci-001)", org: "OpenAI", date: "2022-01-27", eci: 94, lo: 91, hi: 98, access: "API access" },
-  { name: "GPT-3.5 (text-davinci-002)", org: "OpenAI", date: "2022-03-15", eci: 106, lo: 102, hi: 110, access: "API access" },
-  { name: "ChatGPT", org: "OpenAI", date: "2022-11-30", eci: 107, lo: 101, hi: 113, access: "Hosted access (no API)" },
+export const ESTIMATE_BENCHMARKS = [
+  { file: "mmlu", column: "EM", chance: 0.25 },
+  { file: "hella_swag", column: "Overall accuracy", chance: 0.25 },
+  { file: "piqa", column: "Score", chance: 0.5 },
+  { file: "bool_q", column: "Score", chance: 0.5 },
+  { file: "wino_grande", column: "Accuracy", chance: 0.5 },
+  { file: "arc_ai2", column: "Challenge score", chance: 0.25 },
+  { file: "open_book_qa", column: "Accuracy", chance: 0.25 },
+  { file: "lambada", column: "Score", chance: 0 },
+  { file: "trivia_qa", column: "EM", chance: 0 },
+  { file: "gsm8k", column: "EM", chance: 0 },
 ];
+
+/**
+ * An old model needs scores on at least this many of ESTIMATE_BENCHMARKS to be estimated. This
+ * leaves out T5, whose only usable score is a fine-tuned BoolQ result.
+ */
+export const ESTIMATE_MIN_BENCHMARKS = 3;
+
+/** Published scores missing from Epoch's archive, added to it before estimating (0-1 scale). */
+export const SUPPLEMENTAL_SCORES = [
+  // GPT-3 175B few-shot MMLU, from the MMLU paper (Hendrycks et al., 2021, Table 1): https://arxiv.org/abs/2009.03300
+  { model: "GPT-3 175B (davinci)", benchmark: "mmlu", score: 0.439 },
+];
+
+/** Readable chart names for Epoch's model groups. */
+export const NAME_OVERRIDES: Record<string, string> = {
+  "GPT-2 (1.5B)": "GPT-2",
+  "GPT-3 175B (davinci)": "GPT-3",
+  "InstructGPT 175B": "InstructGPT (text-davinci-001)",
+  "davinci-002": "GPT-3.5 (text-davinci-002)",
+  "davinci-003": "ChatGPT (text-davinci-003)",
+};
 
 /**
  * How the frontier is extrapolated. "exponential" fits ln(ECI) linearly on release date
@@ -123,7 +138,7 @@ export interface FrontierPoint {
   lo: number | null;
   hi: number | null;
   label: boolean;
-  /** Hand-estimated score (see ESTIMATED_MODELS), not from Epoch. */
+  /** Score estimated from older benchmarks (see ESTIMATE_BENCHMARKS), not Epoch's ECI. */
   estimated: boolean;
 }
 
@@ -231,10 +246,10 @@ export const horizonMinutes = (horizon: LinearFit, eci: number) => 2 ** evaluate
 
 /**
  * Models that scored higher than every model released before them, from FRONTIER_START_DATE on
- * (plus ESTIMATED_MODELS, whatever their date). Models with an EXCLUDED_ACCESS level are skipped.
+ * (plus the estimated older models, whatever their date). Models with an EXCLUDED_ACCESS level are skipped.
  * Models released the same day compete with each other; only the best can set the record.
  */
-export function frontierModels(eciRows: Row[]): FrontierPoint[] {
+export function frontierModels(eciRows: Row[], estimates: EstimatedModel[] = []): FrontierPoint[] {
   const num = (v: string | undefined) => (v === undefined || v.trim() === "" ? null : Number(v));
   const models = eciRows
     .map((r) => ({
@@ -251,7 +266,7 @@ export function frontierModels(eciRows: Row[]): FrontierPoint[] {
     .filter((m) => m.date >= FRONTIER_START_DATE)
     .filter((m) => !EXCLUDED_MODELS.some((re) => re.test(m.key)))
     .map((m) => ({ ...m, estimated: false }))
-    .concat(ESTIMATED_MODELS.map((e) => ({ ...e, key: e.name, estimated: true })))
+    .concat(estimates.map((e) => ({ ...e, date: DATE_OVERRIDES[e.key] ?? e.date, estimated: true })))
     .filter((m) => !EXCLUDED_ACCESS.includes(m.access))
     .sort((a, b) => a.date.localeCompare(b.date) || b.eci - a.eci);
 
@@ -274,6 +289,96 @@ export function frontierModels(eciRows: Row[]): FrontierPoint[] {
     frontier[frontier.length - 1].label = true;
   }
   return frontier;
+}
+
+export interface EstimatedModel {
+  key: string;
+  name: string;
+  org: string;
+  date: string;
+  access: string;
+  eci: number;
+  lo: number;
+  hi: number;
+  /** How many benchmarks the estimate draws on. */
+  benchmarks: number;
+}
+
+/**
+ * ECI estimates for models released before FRONTIER_START_DATE that Epoch doesn't score, from
+ * their scores on ESTIMATE_BENCHMARKS (see there for the method).
+ */
+export function estimateOldModels(eciRows: Row[], metadataRows: Row[], benchmarkRows: Record<string, Row[]>): EstimatedModel[] {
+  const eciByModel = new Map(eciRows.filter((r) => r["eci"]).map((r) => [r["Model"], Number(r["eci"])]));
+  const metadata = new Map(metadataRows.map((r) => [r["model_version"], r]));
+  const groupOf = (version: string) => {
+    const m = metadata.get(version);
+    if (!m) return version;
+    if (eciByModel.has(m["model_group"])) return m["model_group"];
+    if (eciByModel.has(m["display_name"])) return m["display_name"];
+    return m["model_group"] || m["display_name"] || version;
+  };
+
+  // Best score per model group on each benchmark, plus where each group's date/org/access come from
+  const scores = new Map<string, Map<string, number>>(ESTIMATE_BENCHMARKS.map((b) => [b.file, new Map()]));
+  const info = new Map<string, { date: string; org: string; access: string }>();
+  for (const { file, column } of ESTIMATE_BENCHMARKS) {
+    for (const r of benchmarkRows[file] ?? []) {
+      let score = Number(r[column]);
+      if (!r[column] || !Number.isFinite(score)) continue;
+      if (score > 1.5) score /= 100;
+      const version = r["Model version"];
+      const key = groupOf(version);
+      const best = scores.get(file)!;
+      best.set(key, Math.max(score, best.get(key) ?? -Infinity));
+      const m = metadata.get(version);
+      const date = m?.["date"] || r["Release date"] || "";
+      const prev = info.get(key);
+      info.set(key, {
+        date: prev?.date && (!date || prev.date <= date) ? prev.date : date,
+        org: prev?.org || m?.["organization"] || r["Organization"] || "",
+        access: prev?.access || m?.["accessibility"] || "",
+      });
+    }
+  }
+  for (const { model, benchmark, score } of SUPPLEMENTAL_SCORES) scores.get(benchmark)?.set(model, score);
+
+  // Chance-adjusted logit, clamped so near-floor and near-ceiling scores stay finite
+  const logit = (score: number, chance: number) => {
+    const p = Math.min(Math.max((score - chance) / (1 - chance), 0.02), 0.98);
+    return Math.log(p / (1 - p));
+  };
+
+  // Per benchmark: ECI ~ logit(score) over Epoch-scored models that aren't at the ceiling
+  const fits = ESTIMATE_BENCHMARKS.flatMap(({ file, chance }) => {
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const [key, score] of scores.get(file)!) {
+      const eci = eciByModel.get(key);
+      if (eci === undefined || (score - chance) / (1 - chance) >= 0.97) continue;
+      xs.push(logit(score, chance));
+      ys.push(eci);
+    }
+    if (xs.length < 8) return [];
+    const fit = linearFit(xs, ys);
+    const sd = Math.sqrt(xs.reduce((s, x, i) => s + (ys[i] - evaluate(fit, x)) ** 2, 0) / (xs.length - 2));
+    return [{ file, chance, fit, sd }];
+  });
+
+  const estimates: EstimatedModel[] = [];
+  for (const [key, { date, org, access }] of info) {
+    if (eciByModel.has(key) || !date || date >= FRONTIER_START_DATE) continue;
+    const preds = fits.flatMap(({ file, chance, fit, sd }) => {
+      const score = scores.get(file)!.get(key);
+      return score === undefined ? [] : [{ eci: evaluate(fit, logit(score, chance)), weight: 1 / sd ** 2 }];
+    });
+    if (preds.length < ESTIMATE_MIN_BENCHMARKS) continue;
+    const total = preds.reduce((s, p) => s + p.weight, 0);
+    const eci = preds.reduce((s, p) => s + p.eci * p.weight, 0) / total;
+    const se = 1 / Math.sqrt(total);
+    estimates.push({ key, name: NAME_OVERRIDES[key] ?? key, org, date, access, eci, lo: eci - se, hi: eci + se, benchmarks: preds.length });
+  }
+  return estimates.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /**
@@ -312,15 +417,17 @@ export function horizonFit(eciRows: Row[], metrRows: Row[], metadataRows: Row[])
 }
 
 /** The full page model from Epoch's raw CSV text. */
-export function buildForecast(csv: { eci: string; metr: string; metadata: string }): Forecast {
+export function buildForecast(csv: { eci: string; metr: string; metadata: string; benchmarks: Record<string, string> }): Forecast {
   const eciRows = parseCsv(csv.eci);
-  const points = frontierModels(eciRows);
+  const metadataRows = parseCsv(csv.metadata);
+  const benchmarkRows = Object.fromEntries(Object.entries(csv.benchmarks).map(([file, text]) => [file, parseCsv(text)]));
+  const points = frontierModels(eciRows, estimateOldModels(eciRows, metadataRows, benchmarkRows));
   const trend = fitTrend(
     TREND_KIND,
     points.map((p) => toYear(p.date)),
     points.map((p) => p.eci),
   );
-  const horizon = horizonFit(eciRows, parseCsv(csv.metr), parseCsv(csv.metadata));
+  const horizon = horizonFit(eciRows, parseCsv(csv.metr), metadataRows);
   const milestones = MILESTONES.map(({ label, eci }) => {
     const year = trendYear(trend, eci);
     return { label, eci, date: year === null ? null : Math.round(fromYear(year)) };

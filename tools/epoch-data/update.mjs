@@ -2,8 +2,9 @@
 //
 //   npm run update:epoch
 //
-// Downloads Epoch's public benchmark archive, extracts the three CSVs the page is computed
-// from into src/data/epoch/, and records the retrieval date. Everything on the page (frontier
+// Downloads Epoch's public benchmark archive, extracts the CSVs the page is computed from into
+// src/data/epoch/ (the benchmark scores used to estimate ECI for pre-2023 models go in
+// benchmarks/), and records the retrieval date. Everything on the page (frontier
 // models, trend line, milestone dates, time-horizon formula) is derived from these files at build
 // time, so after running this, rebuild/deploy and the page updates itself.
 
@@ -17,6 +18,12 @@ const FILES = {
   "epoch_capabilities_index/eci_scores.csv": "eci_scores.csv",
   "metr_time_horizons_external.csv": "metr_time_horizons_external.csv",
   "model_metadata.csv": "model_metadata.csv",
+  ...Object.fromEntries(
+    ["mmlu", "hella_swag", "piqa", "bool_q", "wino_grande", "arc_ai2", "open_book_qa", "lambada", "trivia_qa", "gsm8k"].map((b) => [
+      `${b}_external.csv`,
+      `benchmarks/${b}_external.csv`,
+    ]),
+  ),
 };
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../src/data/epoch");
 
@@ -60,7 +67,7 @@ if (!response.ok) throw new Error(`Download failed: ${response.status} ${respons
 const zip = Buffer.from(await response.arrayBuffer());
 const entries = readZipEntries(zip, Object.keys(FILES));
 
-mkdirSync(OUT_DIR, { recursive: true });
+mkdirSync(join(OUT_DIR, "benchmarks"), { recursive: true });
 for (const [entry, file] of Object.entries(FILES)) {
   const data = entries.get(entry);
   if (!data) throw new Error(`${entry} is missing from ${SOURCE_URL}; Epoch may have reorganized the archive`);
