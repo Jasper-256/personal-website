@@ -518,9 +518,11 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
     const VIEW_STARTS = { all: Math.floor(points[0].x), modern: toYear(MODERN_VIEW_START) };
     let view: keyof typeof VIEW_STARTS = "all";
 
-    // Axis ranges follow the visible data: whole years across, and a little headroom around the scores
-    function domain() {
-      const X0 = VIEW_STARTS[view];
+    // Axis ranges follow the visible data: whole years across, and a little headroom around the scores.
+    // The minor-tick weights (0 or 1 at rest) are numbers so a zoom can fade them in and out.
+    type Domain = { X0: number; X1: number; Y0: number; Y1: number; yMinor: number; xMinor: number };
+    function domainFor(v: keyof typeof VIEW_STARTS): Domain {
+      const X0 = VIEW_STARTS[v];
       const X1 = Math.ceil(points[n - 1].x + 0.08);
       const inView = points.filter((p) => p.x >= X0);
       const entering = points.filter((p) => p.x < X0).at(-1); // the record the staircase carries into view
@@ -528,9 +530,18 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
       const highs = inView.map((p) => p.hi ?? p.eci);
       const Y0 = Math.floor((Math.min(...lows) - 1) / 5) * 5;
       const Y1 = Math.ceil((Math.max(...highs) + 1) / 10) * 10;
-      return { X0, X1, Y0, Y1, Y_STEP: Y1 - Y0 > 100 ? 20 : 10 };
+      return { X0, X1, Y0, Y1, yMinor: Y1 - Y0 > 100 ? 0 : 1, xMinor: X1 - X0 > 5 ? 0 : 1 };
     }
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const lerpDomain = (a: Domain, b: Domain, t: number) =>
+      Object.fromEntries(Object.keys(a).map((k) => [k, lerp(a[k as keyof Domain], b[k as keyof Domain], t)])) as Domain;
 
+    // Where the direct labels and the trend label sit. A zoom holds these fixed so they ride along with the data
+    // rather than re-placing themselves every frame.
+    type Layout = { spots: Map<number, [number, number, "start" | "end"]>; trendX: number | null };
+
+    let shown = domainFor(view);
+    let layout: Layout = { spots: new Map(), trendX: null };
     let firstRender = true;
     let activeIndex = -1;
     // Indexed like `points`; null for models outside the current zoom
@@ -538,9 +549,9 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
     let pointNodes: (SVGGElement | null)[] = [];
     let activate: (i: number) => void = () => {};
 
-    function render() {
-      const { X0, X1, Y0, Y1, Y_STEP } = domain();
-      const visible = (i: number) => points[i].x >= X0;
+    function render(dom: Domain = shown, fixed?: Layout): Layout {
+      const { X0, X1, Y0, Y1, yMinor, xMinor } = dom;
+      const out: Layout = { spots: new Map(), trendX: null };
       const firstVisible = points.findIndex((p) => p.x >= X0);
       const width = chart.clientWidth;
       const narrow = width < 560;
@@ -550,26 +561,30 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
       const ih = height - m.top - m.bottom;
       const sx = (x: number) => m.left + ((x - X0) / (X1 - X0)) * iw;
       const sy = (y: number) => m.top + (1 - (y - Y0) / (Y1 - Y0)) * ih;
+      // Dots stay drawn until they slide fully past the y-axis (only happens mid-zoom)
+      const visible = (i: number) => sx(points[i].x) > m.left - 6;
 
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
       svg.setAttribute("height", String(height));
       svg.replaceChildren();
       svg.classList.toggle("animate", firstRender);
 
-      // Grid + ticks
+      // Grid + ticks: every 20 ECI, plus the in-between 10s when zoomed in; whole years, plus July when zoomed in
       const grid = el("g", { class: "grid" }, svg);
-      for (let y = Math.ceil(Y0 / Y_STEP) * Y_STEP; y <= Y1; y += Y_STEP) {
-        el("line", { x1: m.left, x2: width - m.right, y1: sy(y), y2: sy(y) }, grid);
-        const t = el("text", { class: "tick", x: m.left - 8, y: sy(y), "text-anchor": "end", "dominant-baseline": "middle" }, svg);
+      for (let y = Math.ceil(Y0 / 10) * 10; y <= Y1; y += 10) {
+        const opacity = y % 20 === 0 ? 1 : yMinor;
+        if (opacity < 0.01) continue;
+        el("line", { x1: m.left, x2: width - m.right, y1: sy(y), y2: sy(y), opacity }, grid);
+        const t = el("text", { class: "tick", x: m.left - 8, y: sy(y), "text-anchor": "end", "dominant-baseline": "middle", opacity }, svg);
         t.textContent = String(y);
       }
-      for (let x = X0; x <= X1; x += 0.5) {
+      for (let x = Math.ceil(X0 * 2 - 1e-9) / 2; x <= X1; x += 0.5) {
         const isYear = Number.isInteger(x);
-        if (!isYear && (narrow || X1 - X0 > 5)) continue;
+        const opacity = isYear ? 1 : narrow ? 0 : 0.6 * xMinor;
+        if (opacity < 0.01) continue;
         if (isYear) el("line", { x1: sx(x), x2: sx(x), y1: m.top, y2: m.top + ih }, grid);
-        const t = el("text", { class: "tick", x: sx(x), y: height - 10, "text-anchor": "middle" }, svg);
+        const t = el("text", { class: "tick", x: sx(x), y: height - 10, "text-anchor": "middle", opacity }, svg);
         t.textContent = isYear ? String(x) : "Jul";
-        if (!isYear) t.setAttribute("opacity", "0.6");
       }
       el("line", { class: "baseline", x1: m.left, x2: width - m.right, y1: m.top + ih, y2: m.top + ih }, svg);
       const yTitle = el("text", { class: "axis-title", x: m.left - 8, y: m.top - 14, "text-anchor": "end" }, svg);
@@ -581,8 +596,12 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
       // Trend line (sampled, so curved fits draw correctly): solid-dash across the data, fainter extension to the chart edges
       const xa = Math.max(points[0].x, X0);
       const xb = points[n - 1].x;
-      const clip = el("clipPath", { id: "plot-clip" }, el("defs", {}, svg));
+      const defs = el("defs", {}, svg);
+      const clip = el("clipPath", { id: "plot-clip" }, defs);
       el("rect", { x: m.left, y: m.top, width: iw, height: ih }, clip);
+      // Cuts dots off at the y-axis only, so ones touching the top or bottom edge stay whole
+      const leftClip = el("clipPath", { id: "left-clip" }, defs);
+      el("rect", { x: m.left, y: 0, width: width - m.left, height }, leftClip);
       const trendLayer = el("g", { "clip-path": "url(#plot-clip)" }, svg);
       const seg = (x1: number, x2: number, cls: string) => {
         const steps = Math.max(1, Math.ceil(Math.abs(x2 - x1) * 24));
@@ -602,28 +621,33 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
         const tl = el("text", { class: "trend-label", "text-anchor": "middle" }, svg);
         tl.textContent = trendRate(trend);
         const half = tl.getComputedTextLength() / 2;
-        const obstacles: [number, number][] = [];
-        points.forEach((p, i) => {
-          if (!visible(i)) return;
-          obstacles.push([sx(p.x), sy(p.eci)]);
-          if (p.lo !== null && p.hi !== null) for (let y = sy(p.hi); y <= sy(p.lo); y += 4) obstacles.push([sx(p.x), y]);
-        });
-        let best = { score: -Infinity, x: 0, y: 0, angle: 0 };
-        for (let t = 0.04; t <= 0.96; t += 0.01) {
-          const lx = xa + t * (xb - xa);
+        // Text centre sits 8px above the line at data-year lx; its box runs ±half along the line, ~10px tall
+        const place = (lx: number) => {
           const rad = Math.atan2(sy(trendAt(lx + 0.01)) - sy(trendAt(lx)), sx(lx + 0.01) - sx(lx));
           const [dx, dy] = [Math.cos(rad), Math.sin(rad)];
-          // Text centre sits 8px above the line; its box runs ±half along the line, ~10px tall
-          const cx = sx(lx) + dy * 8;
-          const cy = sy(trendAt(lx)) - dx * 8;
-          if (cx - half < m.left || cx + half > m.left + iw) continue;
-          let score = Infinity;
-          for (const [ox, oy] of obstacles) {
-            const along = Math.max(-half, Math.min(half, (ox - cx) * dx + (oy - cy) * dy));
-            score = Math.min(score, Math.hypot(ox - (cx + dx * along - dy * 4), oy - (cy + dy * along + dx * 4)));
+          return { lx, dx, dy, x: sx(lx) + dy * 8, y: sy(trendAt(lx)) - dx * 8, angle: (rad * 180) / Math.PI };
+        };
+        let best = { score: -Infinity, ...place(xa) };
+        if (fixed?.trendX != null) best = { score: 0, ...place(fixed.trendX) };
+        else {
+          const obstacles: [number, number][] = [];
+          points.forEach((p, i) => {
+            if (!visible(i)) return;
+            obstacles.push([sx(p.x), sy(p.eci)]);
+            if (p.lo !== null && p.hi !== null) for (let y = sy(p.hi); y <= sy(p.lo); y += 4) obstacles.push([sx(p.x), y]);
+          });
+          for (let t = 0.04; t <= 0.96; t += 0.01) {
+            const c = place(xa + t * (xb - xa));
+            if (c.x - half < m.left || c.x + half > m.left + iw) continue;
+            let score = Infinity;
+            for (const [ox, oy] of obstacles) {
+              const along = Math.max(-half, Math.min(half, (ox - c.x) * c.dx + (oy - c.y) * c.dy));
+              score = Math.min(score, Math.hypot(ox - (c.x + c.dx * along - c.dy * 4), oy - (c.y + c.dy * along + c.dx * 4)));
+            }
+            if (score > best.score) best = { score, ...c };
           }
-          if (score > best.score) best = { score, x: cx, y: cy, angle: (rad * 180) / Math.PI };
         }
+        out.trendX = best.lx;
         tl.setAttribute("x", best.x.toFixed(1));
         tl.setAttribute("y", best.y.toFixed(1));
         tl.setAttribute("transform", `rotate(${best.angle.toFixed(2)} ${best.x.toFixed(1)} ${best.y.toFixed(1)})`);
@@ -639,7 +663,7 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
       // Points
       positions = [];
       pointNodes = [];
-      const layer = el("g", {}, svg);
+      const layer = el("g", { "clip-path": "url(#left-clip)" }, svg);
       points.forEach((p, i) => {
         if (!visible(i)) {
           positions.push(null);
@@ -671,32 +695,35 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
 
       // Direct labels on a few models. Each tries a few spots around its dot and takes the one
       // clearest of dots, whiskers, the staircase, the trend line, the zoom toggle and other labels.
-      const svgBox = svg.getBoundingClientRect();
       const obstacles: [number, number][] = [];
       const addRect = (x: number, y: number, w: number, h: number) => {
         for (let ox = x; ox <= x + w; ox += 4) for (let oy = y; oy <= y + h; oy += 4) obstacles.push([ox, oy]);
       };
-      const addClientRect = (node: Element | null) => {
-        if (!node) return;
-        const r = node.getBoundingClientRect();
-        addRect(r.left - svgBox.left, r.top - svgBox.top, r.width, r.height);
-      };
-      points.forEach((p, i) => {
-        const pos = positions[i];
-        if (!pos) return;
-        for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) obstacles.push([pos.cx + Math.cos(a) * 5, pos.cy + Math.sin(a) * 5]);
-        if (p.lo !== null && p.hi !== null) for (let y = sy(p.hi); y <= sy(p.lo); y += 4) obstacles.push([pos.cx, y]);
-        const next = points[i + 1];
-        if (next) {
-          for (let x = Math.max(m.left, sx(p.x)); x <= sx(next.x); x += 4) obstacles.push([x, sy(p.eci)]);
-          for (let y = sy(next.eci); y <= sy(p.eci); y += 4) obstacles.push([sx(next.x), y]);
-        }
-      });
-      for (let x = m.left; x <= m.left + iw; x += 4) obstacles.push([x, sy(trendAt(X0 + ((x - m.left) / iw) * (X1 - X0)))]);
-      addClientRect(svg.querySelector(".trend-label"));
-      addClientRect(document.getElementById("zoom"));
+      if (!fixed) {
+        const svgBox = svg.getBoundingClientRect();
+        const addClientRect = (node: Element | null) => {
+          if (!node) return;
+          const r = node.getBoundingClientRect();
+          addRect(r.left - svgBox.left, r.top - svgBox.top, r.width, r.height);
+        };
+        points.forEach((p, i) => {
+          const pos = positions[i];
+          if (!pos) return;
+          for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) obstacles.push([pos.cx + Math.cos(a) * 5, pos.cy + Math.sin(a) * 5]);
+          if (p.lo !== null && p.hi !== null) for (let y = sy(p.hi); y <= sy(p.lo); y += 4) obstacles.push([pos.cx, y]);
+          const next = points[i + 1];
+          if (next) {
+            for (let x = Math.max(m.left, sx(p.x)); x <= sx(next.x); x += 4) obstacles.push([x, sy(p.eci)]);
+            for (let y = sy(next.eci); y <= sy(p.eci); y += 4) obstacles.push([sx(next.x), y]);
+          }
+        });
+        for (let x = m.left; x <= m.left + iw; x += 4) obstacles.push([x, sy(trendAt(X0 + ((x - m.left) / iw) * (X1 - X0)))]);
+        addClientRect(svg.querySelector(".trend-label"));
+        addClientRect(document.getElementById("zoom"));
+      }
 
-      const labels = el("g", {}, svg);
+      // Mid-zoom, labels leave with their dots at the y-axis; at rest they may hang past it
+      const labels = el("g", fixed ? { "clip-path": "url(#left-clip)" } : {}, svg);
       points.forEach((p, i) => {
         const pos = positions[i];
         if (!p.label || !pos) return;
@@ -704,6 +731,15 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
         const t = el("text", { class: "label" }, labels);
         t.style.setProperty("--i", String(i - firstVisible)); // fades in with its dot
         t.textContent = p.name.replace(/ \(.*\)$/, "");
+        const held = fixed?.spots.get(i);
+        if (held) {
+          const [dx, dy, anchor] = held;
+          t.setAttribute("x", (cx + dx).toFixed(1));
+          t.setAttribute("y", (cy + dy).toFixed(1));
+          t.setAttribute("text-anchor", anchor);
+          out.spots.set(i, held);
+          return;
+        }
         const w = t.getComputedTextLength();
         const h = 11;
         // [x offset, baseline offset, anchor]; the first is this label's usual spot
@@ -717,7 +753,7 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
         ];
         if (i === n - 1) spots.unshift([-10, -2, "end"]);
         else if (i === 0) spots.unshift([10, -9, "start"]);
-        let best = { score: -Infinity, x: 0, y: 0, anchor: "start" };
+        let best: { score: number; x: number; y: number; anchor: "start" | "end" } = { score: -Infinity, x: 0, y: 0, anchor: "start" };
         spots.forEach(([dx, dy, anchor], k) => {
           const x = cx + dx;
           const y = cy + dy;
@@ -737,6 +773,7 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
         t.setAttribute("y", best.y.toFixed(1));
         t.setAttribute("text-anchor", best.anchor);
         addRect(best.anchor === "start" ? best.x : best.x - w, best.y - h + 2, w, h);
+        out.spots.set(i, [best.x - cx, best.y - cy, best.anchor]);
       });
 
       activate = (i: number) => {
@@ -772,10 +809,12 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
       };
 
       firstRender = false;
+      return out;
     }
 
     // Pointer: nearest point wins, so readers never have to hit a 10px dot
     const onPointer = (e: PointerEvent) => {
+      if (zooming) return;
       const r = svg.getBoundingClientRect();
       const px = e.clientX - r.left;
       const py = e.clientY - r.top;
@@ -801,7 +840,46 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
       if (!svg.contains(e.target as Node)) activate(-1);
     });
 
-    // Zoom toggle, pinned to the plot's top-left corner
+    // Zoom toggle, pinned to the plot's top-left corner. Switching views eases the axes between the two
+    // windows, redrawing each frame; labels hold their end-state spots so they glide with their dots.
+    const ZOOM_MS = 250;
+    // Ease-out quart: moves the instant you click, then settles gently into place
+    const ease = (t: number) => 1 - (1 - t) ** 4;
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    let zoomFrame = 0;
+    let zooming = false;
+
+    function zoomTo(next: keyof typeof VIEW_STARTS) {
+      cancelAnimationFrame(zoomFrame);
+      const from = shown; // mid-zoom, this picks up from wherever the last one got to
+      const fromLayout = layout;
+      const to = domainFor(next);
+      const toLayout = render(to); // settles the end-state label spots; repainted below before the browser draws
+      if (reducedMotion.matches) {
+        shown = to;
+        layout = toLayout;
+        zooming = false;
+        return;
+      }
+      const held: Layout = { spots: new Map([...fromLayout.spots, ...toLayout.spots]), trendX: null };
+      const start = performance.now();
+      zooming = true;
+      const frame = (now: number) => {
+        const t = Math.min(1, (now - start) / ZOOM_MS);
+        const e = ease(t);
+        shown = t < 1 ? lerpDomain(from, to, e) : to;
+        if (t < 1) {
+          const tx = fromLayout.trendX != null && toLayout.trendX != null ? lerp(fromLayout.trendX, toLayout.trendX, e) : toLayout.trendX;
+          layout = render(shown, { ...held, trendX: tx });
+          zoomFrame = requestAnimationFrame(frame);
+        } else {
+          zooming = false;
+          layout = render(to);
+        }
+      };
+      frame(start);
+    }
+
     const zoomButtons = [...document.querySelectorAll<HTMLButtonElement>("#zoom button")];
     for (const button of zoomButtons) {
       button.addEventListener("click", () => {
@@ -811,19 +889,18 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
         zoomButtons.forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
         activeIndex = -1;
         tooltip.hidden = true;
-        render();
-        svg.animate?.([{ opacity: 0.35 }, { opacity: 1 }], { duration: 220, easing: "ease-out" });
+        zoomTo(next);
       });
     }
 
-    render();
+    layout = render();
     let lastWidth = chart.clientWidth;
     new ResizeObserver(() => {
       if (chart.clientWidth === lastWidth) return;
       lastWidth = chart.clientWidth;
       activeIndex = -1;
       tooltip.hidden = true;
-      render();
+      if (!zooming) layout = render(); // a running zoom redraws at the new width on its next frame
     }).observe(chart);
   </script>
 </Layout>
