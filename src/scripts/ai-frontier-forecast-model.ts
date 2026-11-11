@@ -24,6 +24,10 @@ export const EXCLUDED_MODELS: RegExp[] = [/^GPT-[\d.]+ Pro\b/i, /^o\d+-pro\b/i];
 /**
  * Release dates that replace Epoch's. Keep these when refreshing the data.
  *
+ * Use public release dates instead of snapshot dates or later availability dates:
+ * - Claude 3 Opus: https://www.anthropic.com/news/claude-3-family
+ * - Gemini 2.5 Pro: https://blog.google/innovation-and-ai/models-and-research/google-deepmind/gemini-model-thinking-updates-march-2025/
+ *
  * GPT-4 Turbo (Nov 2023): Epoch dates this model family 2024-01-25 because it folds in
  * gpt-4-0125-preview (a January 2024 update, whose METR time horizon feeds the score). The family
  * is named for, and mostly scored on, the original GPT-4 Turbo (gpt-4-1106-preview), released
@@ -31,6 +35,8 @@ export const EXCLUDED_MODELS: RegExp[] = [/^GPT-[\d.]+ Pro\b/i, /^o\d+-pro\b/i];
  */
 export const DATE_OVERRIDES: Record<string, string> = {
   "GPT-4 Turbo (Nov 2023)": "2023-11-06",
+  "Claude 3 Opus": "2024-03-04",
+  "Gemini 2.5 Pro (Mar 2025)": "2025-03-25",
 };
 
 /** Frontier models that get a direct label on wide screens (the first and latest always do). */
@@ -67,7 +73,8 @@ export const EXCLUDED_ACCESS = ["Unreleased", "Limited access"];
  */
 export const ESTIMATED_MODELS: { name: string; org: string; date: string; eci: number; lo: number; hi: number; access: string }[] = [
   { name: "GPT-2", org: "OpenAI", date: "2019-11-05", eci: 49, lo: 45, hi: 53, access: "Open weights (unrestricted)" },
-  { name: "GPT-3", org: "OpenAI", date: "2020-05-28", eci: 80, lo: 75, hi: 85, access: "API access" },
+  // API launch (private beta), rather than the paper date: https://openai.com/index/openai-api/
+  { name: "GPT-3", org: "OpenAI", date: "2020-06-11", eci: 80, lo: 75, hi: 85, access: "API access" },
   { name: "Gopher", org: "Google DeepMind", date: "2021-12-08", eci: 97, lo: 93, hi: 101, access: "Unreleased" },
   { name: "InstructGPT (text-davinci-001)", org: "OpenAI", date: "2022-01-27", eci: 94, lo: 91, hi: 98, access: "API access" },
   { name: "GPT-3.5 (text-davinci-002)", org: "OpenAI", date: "2022-03-15", eci: 106, lo: 102, hi: 110, access: "API access" },
@@ -88,12 +95,14 @@ export const TREND_KIND: TrendKind = "linear";
  * ECI at the date it reaches each milestone. These come from the Q3.5 timelines update run
  * (https://blog.aifutures.org/p/q35-timelines-update-looks-like-the), linked from the post as
  * https://www.aifuturesmodel.com/p?v=2&base=eli-08-16-26&ed=q3.5&rcl=-0.5&suard=7.052322627593112&eudt=3.0130366136756046&ila=60&icaec=1.5
- * As of 2026-11-10 it reaches Superhuman AI Researcher at ECI ~181.1 (Apr 2027) and Top Expert
- * Dominating AI (TED-AI) at ~206.9 (Jun 2027).
+ * As of 2026-11-10 it reaches Superhuman AI Researcher at ECI ~180.93 (Apr 2027) and Top Expert
+ * Dominating AI (TED-AI) at ~202.93 (Jun 2027), rounded here to 181 and 203. These use the run's
+ * linear ECI-to-log-effective-compute mapping at each milestone, rather than interpolation
+ * between its coarse chart samples (which overstates the TED-AI score as ~206.9).
  */
 export const MILESTONES = [
   { label: "Superhuman AI Researcher", eci: 181 },
-  { label: "Top Expert Dominating AI", eci: 207 },
+  { label: "Top Expert Dominating AI", eci: 203 },
 ];
 
 /** Where the chart's "Modern" zoom starts. Display only: the data and trend fit are unchanged. */
