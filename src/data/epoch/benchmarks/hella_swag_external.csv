@@ -252,7 +252,7 @@ NOTE: this is a rough estimate based on public information, much less informatio
 
 Calculation and confidence intervals here: https://colab.research.google.com/drive/1O99z9b1I5O66bT78r9ScslE_nOj5irN9?usp=sharing",GPT-4,10,,GPT-4 Technical Report,http://arxiv.org/abs/2303.08774,recGg30WxShdoma6K
 ,0.663,,,,,,GPT-J (6B),0,,Stanford HELM,https://crfm.stanford.edu/helm/classic/latest/#/groups/hellaswag,recgEHai1fuGSnQ6U
-gpt-j-6b,0.662,2021-08-05,"EleutherAI,LAION","Germany,United States of America",1.5e+22,source: zero shot evaluation table in GitHub,GPT-J-6B,0,,XGen-7B Technical Report,http://arxiv.org/abs/2309.03450,reckIFCQgW9j4dxIA
+gpt-j-6b,0.662,2021-08-05,"EleutherAI,LAION","United States of America,Germany",1.5e+22,source: zero shot evaluation table in GitHub,GPT-J-6B,0,,XGen-7B Technical Report,http://arxiv.org/abs/2309.03450,reckIFCQgW9j4dxIA
 gpt-neo-2.7B,0.427,2021-03-30,EleutherAI,United States of America,7.9e+21,"source: https://www.aitracker.org/
 
 6 FLOP / token / parameter * 2.7 * 10^9 parameters * 420000000000 tokens [see dataset size notes] = 6.804e+21 FLOP",GPT-Neo-2.7B,,,Textbooks Are All You Need II: phi-1.5 technical report,http://arxiv.org/abs/2309.05463,recdUHL8y6j09NCyI

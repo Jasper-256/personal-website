@@ -366,7 +366,7 @@ doubao-seed-evolving_none,Doubao Seed Evolving (Nov 2026),2026-11-02,"Doubao See
 doubao-seed-evolving_unknown,Doubao Seed Evolving (Nov 2026),2026-11-02,"Doubao Seed Evolving (Nov 2026, unknown)",ByteDance,China,API access,
 Dracarys2-72B-Instruct,Dracarys2-72B-Instruct,2024-09-30,,,,,
 Dracarys2-Llama-3.1-70B-Instruct,Dracarys2-Llama-3.1-70B-Instruct,2024-08-14,,,,,
-Eurus-2-7B-PRIME,Eurus-2-7B-PRIME,2024-12-31,,"Tsinghua University,University of Illinois Urbana-Champaign (UIUC),Shanghai AI Lab,Peking University,Shanghai Jiao Tong University,CUHK Shenzhen Research Institute","China,United States of America",Open weights (unrestricted),4.01915904e+20
+Eurus-2-7B-PRIME,Eurus-2-7B-PRIME,2024-12-31,,"Tsinghua University,University of Illinois Urbana-Champaign (UIUC),Shanghai AI Lab,Peking University,Shanghai Jiao Tong University,CUHK Shenzhen Research Institute","United States of America,China",Open weights (unrestricted),4.01915904e+20
 EXAONE-Deep-32B,EXAONE Deep 32B,2025-03-18,,LG AI Research,South Korea,Open weights (non-commercial),1.26e+24
 falcon-7b,Falcon-7B,2023-04-24,,Technology Innovation Institute,United Arab Emirates,Open weights (unrestricted),6.3e+22
 falcon-11b,Falcon 2 11B,2024-05-09,Falcon 2-11B,Technology Innovation Institute,United Arab Emirates,Open weights (restricted use),3.6e+23
@@ -690,7 +690,7 @@ gpt-6.1-terra_medium,GPT-6.1 Terra,2026-10-26,GPT-6.1 Terra (medium),OpenAI,Unit
 gpt-6.1-terra_none,GPT-6.1 Terra,2026-10-26,GPT-6.1 Terra (none),OpenAI,United States of America,API access,
 gpt-6.1-terra_unknown,GPT-6.1 Terra,2026-10-26,GPT-6.1 Terra (unknown thinking),OpenAI,United States of America,API access,
 gpt-6.1-terra_xhigh,GPT-6.1 Terra,2026-10-26,GPT-6.1 Terra (xhigh),OpenAI,United States of America,API access,
-gpt-j-6b,GPT-J-6B,2021-08-05,,"EleutherAI,LAION","Germany,United States of America",Open weights (unrestricted),1.5e+22
+gpt-j-6b,GPT-J-6B,2021-08-05,,"EleutherAI,LAION","United States of America,Germany",Open weights (unrestricted),1.5e+22
 gpt-neo-2.7B,GPT-Neo-2.7B,2021-03-30,,EleutherAI,United States of America,Open weights (unrestricted),7.9e+21
 gpt-neox-20b,GPT-NeoX-20B,2022-04-07,,EleutherAI,United States of America,Open weights (unrestricted),9.31627008e+22
 gpt-oss-20b,gpt-oss-20b,2025-08-05,,OpenAI,United States of America,Open weights (unrestricted),5.49e+23
