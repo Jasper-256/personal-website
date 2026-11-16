@@ -120,8 +120,11 @@ export const MILESTONES = [
   { label: "Top Expert Dominating AI", eci: 203 },
 ];
 
-/** Where the chart's "Modern" zoom starts. Display only: the data and trend fit are unchanged. */
-export const MODERN_VIEW_START = "2024-01-01";
+/**
+ * The trend is fit only on frontier records from this date on, and the chart starts here. Earlier
+ * models still count when deciding who set a record; they just don't shape the trend.
+ */
+export const TREND_START_DATE = "2024-01-01";
 
 /** METR suite preferred when a model has several time-horizon measurements. */
 const PREFERRED_METR_VERSION = "METR-Horizon-v1.1";
@@ -422,10 +425,11 @@ export function buildForecast(csv: { eci: string; metr: string; metadata: string
   const metadataRows = parseCsv(csv.metadata);
   const benchmarkRows = Object.fromEntries(Object.entries(csv.benchmarks).map(([file, text]) => [file, parseCsv(text)]));
   const points = frontierModels(eciRows, estimateOldModels(eciRows, metadataRows, benchmarkRows));
+  const fitted = points.filter((p) => p.date >= TREND_START_DATE);
   const trend = fitTrend(
     TREND_KIND,
-    points.map((p) => toYear(p.date)),
-    points.map((p) => p.eci),
+    fitted.map((p) => toYear(p.date)),
+    fitted.map((p) => p.eci),
   );
   const horizon = horizonFit(eciRows, parseCsv(csv.metr), metadataRows);
   const milestones = MILESTONES.map(({ label, eci }) => {
