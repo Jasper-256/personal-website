@@ -475,7 +475,10 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
     // The chart starts where the trend fit does. Earlier records stay in the data so the staircase
     // carries the standing record in from the left edge.
     const X0 = toYear(TREND_START_DATE);
-    const X1 = Math.ceil(points[n - 1].x + 0.08);
+    // The standing record's step runs to today, and the chart always reaches past both it and the latest model
+    const NOW = toYear(Date.now());
+    const X1 = Math.ceil(Math.max(points[n - 1].x, NOW) + 0.08);
+    const stepEnd = Math.max(points[n - 1].x, NOW);
     const firstVisible = points.findIndex((p) => p.x >= X0);
     const visible = (i: number) => i >= firstVisible;
     // Axis ranges follow the visible data, with a little headroom around the scores
@@ -567,7 +570,7 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
         points.forEach((p, i) => {
           if (!visible(i - 1) && !visible(i)) return;
           const next = points[i + 1];
-          const xEnd = next ? sx(next.x) : sx(Math.min(X1, xb + 0.06));
+          const xEnd = next ? sx(next.x) : sx(stepEnd);
           for (let x = Math.max(m.left, sx(p.x)); x <= xEnd; x += 4) obstacles.push([x, sy(p.eci)]);
           if (next) for (let y = sy(next.eci); y <= sy(p.eci); y += 4) obstacles.push([xEnd, y]);
           if (!visible(i)) return;
@@ -596,7 +599,7 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
       // Frontier staircase: holds each record until the next one beats it
       let d = `M${sx(points[0].x)},${sy(points[0].eci)}`;
       for (let i = 1; i < n; i++) d += `H${sx(points[i].x)}V${sy(points[i].eci)}`;
-      d += `H${sx(Math.min(X1, xb + 0.06))}`;
+      d += `H${sx(stepEnd)}`;
       const step = el("path", { class: "step", d, "clip-path": "url(#plot-clip)" }, svg);
       step.style.setProperty("--len", String(Math.ceil(step.getTotalLength())));
 
