@@ -8,6 +8,9 @@ const PINCH_ZOOM_SENSITIVITY = 1.5;
 const FRAME_RADIUS = 0.043;
 const ICOSAHEDRON_RADIUS = 1.56;
 const ICOSAHEDRON_EDGE_LENGTH = (4 * ICOSAHEDRON_RADIUS) / Math.sqrt(10 + 2 * Math.sqrt(5));
+// Half-extents of the floor ellipse 0.52 * x² + 0.24 * z² < 7.
+const SHADOW_HALF_WIDTH = Math.sqrt(7 / 0.52);
+const SHADOW_HALF_DEPTH = Math.sqrt(7 / 0.24);
 const LIGHT_BAR_TRIM = 0.035;
 const FACE_PLANE_DISTANCE = (ICOSAHEDRON_EDGE_LENGTH * Math.sqrt(3) * (3 + Math.sqrt(5))) / 12;
 const FACE_EDGE_INRADIUS = ICOSAHEDRON_EDGE_LENGTH / (2 * Math.sqrt(3));
@@ -145,10 +148,17 @@ void main() {
   gl_Position = vec4(position, 0.0, 1.0);
 }`;
 
+const HASH21 = `float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}`;
+
 const FRAGMENT_SHADER = `precision highp float;
 
 out vec4 outColor;
-in vec2 vUv;
+flat in mediump int vFace;
+uniform highp sampler2D uFrameDepth;
 
 uniform vec2 uResolution;
 uniform float uTime;
@@ -159,8 +169,6 @@ uniform vec4 uBounceLighting[${MIRROR_BOUNCES}];
 uniform vec4 uBounceTint[${MIRROR_BOUNCES}];
 // Width of one pixel, in scene units, per unit of ray length.
 uniform float uPixelFootprint;
-uniform highp sampler2D uFrameDepth;
-uniform highp sampler2D uFrameColor;
 
 #define FACE_COUNT 20
 #define MIRROR_BOUNCES ${MIRROR_BOUNCES}
@@ -176,7 +184,6 @@ uniform ivec2 uPairFaces[10];
 
 const float LIGHT_CORE_RADIUS = 0.014;
 const float MIRROR_EDGE_INSET = 0.043;
-const float BOUNDING_RADIUS_SQUARED = 2.5921;
 
 const float FACE_PLANE_DISTANCE = ${FACE_PLANE_DISTANCE.toFixed(12)};
 const float PLANE_DISTANCE = 1.239660977;
@@ -301,21 +308,7 @@ float packedBrightThreshold(vec3 color) {
   return smoothstep(0.52, 0.92, quantizedBrightness);
 }
 
-float hash21(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}
-
-bool intersectsBoundingSphere(vec3 ro, vec3 rd) {
-  float towardCenter = dot(ro, rd);
-  float originDistanceSquared =
-    dot(ro, ro) - BOUNDING_RADIUS_SQUARED;
-  float discriminant =
-    towardCenter * towardCenter - originDistanceSquared;
-  return discriminant >= 0.0 &&
-    (towardCenter < 0.0 || originDistanceSquared <= 0.0);
-}
+${HASH21}
 
 float faceLocalEdgeDistance(vec3 localPoint) {
   vec3 across = faceEdgeAcross(localPoint.xy) - FACE_EDGE_INRADIUS;
@@ -328,52 +321,6 @@ float faceLocalEdgeDistance(vec3 localPoint) {
 
 float faceEdgeDistance(vec3 point, int faceIndex) {
   return faceLocalEdgeDistance(faceLocalPoint(point, faceIndex));
-}
-
-bool intersectIcosahedron(
-  vec3 ro,
-  vec3 rd,
-  out float nearT,
-  out int nearFace
-) {
-${axisProjections("rd", "s")}
-${axisProjections("ro", "q")}
-
-  // Slab entry and exit distances carry the pair index in their low mantissa
-  // bits; nonnegative floats order like unsigned integers. Integers default
-  // to mediump, which can be 16 bits, so the packed values are highp.
-  highp uint entry = 0u;
-  highp uint exit = 0xffffffffu;
-  ${OPPOSITE_FACE_PAIRS.map(
-    (_, pair) => `{
-    float outgoing = uintBitsToFloat(
-      (floatBitsToUint(s${pair}) & 0x80000000u) |
-      floatBitsToUint(${axisPlaneDistance(pair)})
-    );
-    float inverse = 1.0 / s${pair};
-    float slabEntry = max((-outgoing - q${pair}) * inverse, 0.0);
-    float slabExit = max((outgoing - q${pair}) * inverse, 0.0);
-    entry = max(entry, (floatBitsToUint(slabEntry) & ~15u) | ${pair}u);
-    exit = min(exit, (floatBitsToUint(slabExit) & ~15u) | ${pair}u);
-  }`,
-  ).join("\n  ")}
-
-  nearT = FAR;
-  nearFace = 0;
-  // A zero entry distance would mean the camera is inside the icosahedron.
-  if (entry >= exit || entry < 16u) return false;
-
-  int pair = int(entry & 15u);
-  vec4 axis = uPairAxis[pair];
-  float signedDirection = dot(axis.xyz, rd);
-  bool negativeFace = signedDirection > 0.0;
-  float originProjection = dot(axis.xyz, ro);
-  float originSide = axis.w -
-    (negativeFace ? -originProjection : originProjection);
-  float directionSide = negativeFace ? -signedDirection : signedDirection;
-  nearT = -originSide / -directionSide;
-  nearFace = negativeFace ? uPairFaces[pair].y : uPairFaces[pair].x;
-  return true;
 }
 
 // The exit distance is exitNumerator / exitDenominator. They are also the
@@ -437,36 +384,6 @@ vec3 studioEnvironment(vec3 direction) {
   float horizon = exp(-abs(direction.y + 0.08) * 30.0);
   color += vec3(0.016, 0.018, 0.019) * horizon;
   return color;
-}
-
-float backgroundShadow(vec3 ro, vec3 rd) {
-  float shadow = 1.0;
-  if (rd.y < -0.0001) {
-    float floorT = (-1.50 - ro.y) / rd.y;
-    vec3 point = ro + rd * floorT;
-    // Beyond this the broad shadow is far below one output level.
-    if (
-      floorT > 0.0 &&
-      point.x * point.x * 0.52 + point.z * point.z * 0.24 < 7.0
-    ) {
-      float contact = exp(
-        -point.x * point.x * 2.2 -
-        point.z * point.z * 1.05
-      );
-      float broadShadow = exp(
-        -point.x * point.x * 0.52 -
-        point.z * point.z * 0.24
-      );
-      float floorBlend = smoothstep(0.005, 0.115, -rd.y);
-      shadow = mix(
-        1.0,
-        1.0 - contact * 0.72 - broadShadow * 0.08,
-        floorBlend
-      );
-    }
-  }
-
-  return shadow;
 }
 
 // Complete current-ray intersection; no cached face-ID predictor is required.
@@ -695,6 +612,7 @@ vec3 acesToneMap(vec3 color) {
 }
 
 void main() {
+  vec2 vUv = gl_FragCoord.xy / uResolution;
   vec2 screen = vUv * 2.0 - 1.0;
   screen.x *= uResolution.x / uResolution.y;
 
@@ -705,112 +623,65 @@ void main() {
   vec3 ro = worldToObject * worldRo;
   vec3 rd = normalize(worldToObject * worldRd);
 
-  vec3 color;
-  float nearT = FAR;
-  int nearFace = 0;
-  bool glassHit = false;
-  float sceneDepth = 1.0;
-  float pageShadow = 1.0;
+  vec3 frontNormal = uFaceNormal[vFace].xyz;
+  float nearT = (PLANE_DISTANCE - dot(frontNormal, ro)) / dot(frontNormal, rd);
+  // Match the frame's perspective depth, including the original allowance
+  // for the metal tubes at the glass edges.
+  const float depthNear = 0.1;
+  const float depthFar = FAR;
+  float cameraZ = worldRd.z * (nearT + 0.035);
+  float depthA = (depthFar + depthNear) / (depthNear - depthFar);
+  float depthB = (2.0 * depthFar * depthNear) / (depthNear - depthFar);
+  float glassDepth = (depthA * cameraZ + depthB) / (-cameraZ) * 0.5 + 0.5;
+  float frameDepth = texelFetch(uFrameDepth, ivec2(gl_FragCoord.xy), 0).r;
+  if (frameDepth < clamp(glassDepth, 0.0, 1.0)) discard;
+  vec3 frontHit = ro + rd * nearT;
+  vec3 worldNormal = normalize(objectToWorld * frontNormal);
+  vec3 reflectedWorld = reflect(worldRd, worldNormal);
+  float facing = clamp(dot(-rd, frontNormal), 0.0, 1.0);
+  float edgeDistance = faceEdgeDistance(frontHit, vFace);
+  float mirrorCoverage = smoothstep(
+    MIRROR_EDGE_INSET - 0.004,
+    MIRROR_EDGE_INSET,
+    edgeDistance
+  );
 
-  if (intersectsBoundingSphere(ro, rd)) {
-    glassHit = intersectIcosahedron(ro, rd, nearT, nearFace) &&
-      nearT > 0.0;
-  }
+  // Finish front-face values before tracing to keep fewer of them live.
+  vec3 insideOrigin = frontHit - frontNormal * 0.002;
+  vec3 interior = traceMirroredInterior(
+    insideOrigin,
+    rd,
+    vFace,
+    nearT
+  );
 
-  // Resolve the strict LessDepth frame test before tracing mirrors.
-  // The frame attachment is separate from this scene's destination attachment.
-  if (glassHit) {
-    const float depthNear = 0.1;
-    const float depthFar = FAR;
-    float cameraZ = worldRd.z * (nearT + 0.035);
-    float depthA =
-      (depthFar + depthNear) / (depthNear - depthFar);
-    float depthB =
-      (2.0 * depthFar * depthNear) /
-      (depthNear - depthFar);
-    sceneDepth =
-      (depthA * cameraZ + depthB) / (-cameraZ) * 0.5 + 0.5;
-  }
-  ivec2 framePixel = ivec2(gl_FragCoord.xy);
-  float frameDepth = texelFetch(uFrameDepth, framePixel, 0).r;
-  if (frameDepth < clamp(sceneDepth, 0.0, 1.0)) {
-    outColor = texelFetch(uFrameColor, framePixel, 0);
-    return;
-  }
+  vec3 externalReflection = studioEnvironment(reflectedWorld);
+  float fresnelBase = 1.0 - facing;
+  float fresnelSquared = fresnelBase * fresnelBase;
+  float fresnelPower =
+    fresnelSquared * fresnelSquared * fresnelBase;
+  float fresnel =
+    0.045 + (1.0 - 0.045) * fresnelPower;
+  vec3 thinPanelTransmission = vec3(0.988, 0.993, 0.996);
+  float coatingReflection = fresnel * 0.70;
+  float transmission = (1.0 - fresnel) * 0.96;
+  vec3 mirroredPanel =
+    interior * thinPanelTransmission * transmission +
+    externalReflection * coatingReflection;
+  vec3 color = mix(interior, mirroredPanel, mirrorCoverage);
 
-  if (glassHit) {
-    vec3 frontNormal = uFaceNormal[nearFace].xyz;
-    vec3 frontHit = ro + rd * nearT;
-    vec3 worldNormal = normalize(objectToWorld * frontNormal);
-    vec3 reflectedWorld = reflect(worldRd, worldNormal);
-    float facing = clamp(dot(-rd, frontNormal), 0.0, 1.0);
-    float edgeDistance = faceEdgeDistance(frontHit, nearFace);
-    float mirrorCoverage = smoothstep(
-      MIRROR_EDGE_INSET - 0.004,
-      MIRROR_EDGE_INSET,
-      edgeDistance
-    );
-
-    // Finish front-face values before tracing to keep fewer of them live.
-    vec3 insideOrigin = frontHit - frontNormal * 0.002;
-    vec3 interior = traceMirroredInterior(
-      insideOrigin,
-      rd,
-      nearFace,
-      nearT
-    );
-
-    vec3 externalReflection = studioEnvironment(reflectedWorld);
-    float fresnelBase = 1.0 - facing;
-    float fresnelSquared = fresnelBase * fresnelBase;
-    float fresnelPower =
-      fresnelSquared * fresnelSquared * fresnelBase;
-    float fresnel =
-      0.045 + (1.0 - 0.045) * fresnelPower;
-    vec3 thinPanelTransmission = vec3(0.988, 0.993, 0.996);
-    float coatingReflection = fresnel * 0.70;
-    float transmission = (1.0 - fresnel) * 0.96;
-    vec3 mirroredPanel =
-      interior * thinPanelTransmission * transmission +
-      externalReflection * coatingReflection;
-    color = mix(interior, mirroredPanel, mirrorCoverage);
-
-    float silhouette = pow(1.0 - facing, 3.0);
-    color += externalReflection * silhouette *
-      (0.48 * mirrorCoverage);
-    color += vec3(0.018, 0.020, 0.021) *
-      ((1.0 - facing) * 0.34 * mirrorCoverage);
-  } else {
-    pageShadow = backgroundShadow(worldRo, worldRd);
-    color = vec3(0.0);
-  }
-
-  if (glassHit) {
-    float vignette = dot(vUv - 0.5, vUv - 0.5);
-    color *= 1.0 - vignette * 0.56;
-    float grain =
-      hash21(gl_FragCoord.xy + fract(uTime) * 719.31) - 0.5;
-    color += grain * 0.0045;
-    color = acesToneMap(color * 0.98);
-    color = pow(color, vec3(0.4545));
-  } else {
-    // Match the website's dark-mode page background (#141414).
-    const float pageLevel = 0.0784314;
-    float shadowLevel = pageLevel * pageShadow;
-    float shadowDepth = pageLevel - shadowLevel;
-    float ditherStrength = smoothstep(
-      0.0,
-      1.0 / 255.0,
-      shadowDepth
-    );
-    float shadowDither =
-      (hash21(gl_FragCoord.xy) - 0.5) *
-      (1.0 / 255.0) *
-      ditherStrength;
-    color = vec3(
-      clamp(shadowLevel + shadowDither, 0.0, pageLevel)
-    );
-  }
+  float silhouette = pow(1.0 - facing, 3.0);
+  color += externalReflection * silhouette *
+    (0.48 * mirrorCoverage);
+  color += vec3(0.018, 0.020, 0.021) *
+    ((1.0 - facing) * 0.34 * mirrorCoverage);
+  float vignette = dot(vUv - 0.5, vUv - 0.5);
+  color *= 1.0 - vignette * 0.56;
+  float grain =
+    hash21(gl_FragCoord.xy + fract(uTime) * 719.31) - 0.5;
+  color += grain * 0.0045;
+  color = acesToneMap(color * 0.98);
+  color = pow(color, vec3(0.4545));
   outColor = vec4(color, packedBrightThreshold(color));
 }`;
 
@@ -853,6 +724,75 @@ void main() {
   vWorldNormal = uRotation * normal;
 }`;
 
+const FACE_VERTEX_SHADER = `precision highp float;
+in vec3 position;
+uniform vec2 uResolution;
+uniform mat3 uRotation;
+uniform float uZoom;
+flat out mediump int vFace;
+
+void main() {
+  vec3 camera = uRotation * position - vec3(0.0, 0.10, uZoom);
+  float focal = 2.18 / 0.79;
+  // The fragment shader compares glass depth with the frame. Keep this mesh
+  // inside the clip volume even for extreme portrait default zooms.
+  gl_Position = vec4(camera.x * focal * uResolution.y / uResolution.x,
+    camera.y * focal, 0.0, -camera.z);
+  vFace = gl_VertexID / 3;
+}`;
+
+// The floor shadow vanishes outside its elliptical footprint.
+// Rasterize a rectangle enclosing that ellipse in the same camera projection.
+const FLOOR_VERTEX_SHADER = `precision highp float;
+uniform vec2 uResolution;
+uniform float uZoom;
+out vec2 vFloor;
+
+void main() {
+  float x = (gl_VertexID & 1) == 0 ? -${SHADOW_HALF_WIDTH} : ${SHADOW_HALF_WIDTH};
+  float z = (gl_VertexID & 2) == 0 ? ${SHADOW_HALF_DEPTH} : -${SHADOW_HALF_DEPTH};
+  vFloor = vec2(x, z);
+  float focal = 2.18 / 0.79;
+  gl_Position = vec4(x * focal * uResolution.y / uResolution.x, -1.60 * focal, 0.0, uZoom - z);
+}`;
+
+const BACKGROUND_FRAGMENT_SHADER = `precision highp float;
+
+out vec4 outColor;
+in vec2 vFloor;
+uniform float uZoom;
+
+${HASH21}
+
+void main() {
+  vec2 squared = vFloor * vFloor;
+  float broadDistance = dot(squared, vec2(0.52, 0.24));
+  float pageShadow = 1.0;
+  if (broadDistance < 7.0) {
+    float contact = exp(-dot(squared, vec2(2.2, 1.05)));
+    vec3 toFloor = vec3(vFloor.x, -1.60, vFloor.y - uZoom);
+    float floorBlend = smoothstep(0.005, 0.115, 1.60 / length(toFloor));
+    pageShadow -= (contact * 0.72 + exp(-broadDistance) * 0.08) * floorBlend;
+  }
+  // Match the website's dark-mode page background (#141414).
+  const float pageLevel = 0.0784314;
+  float shadowLevel = pageLevel * pageShadow;
+  float shadowDepth = pageLevel - shadowLevel;
+  float ditherStrength = smoothstep(
+    0.0,
+    1.0 / 255.0,
+    shadowDepth
+  );
+  float shadowDither =
+    (hash21(gl_FragCoord.xy) - 0.5) *
+    (1.0 / 255.0) *
+    ditherStrength;
+  vec3 color = vec3(
+    clamp(shadowLevel + shadowDither, 0.0, pageLevel)
+  );
+  outColor = vec4(color, 0.0);
+}`;
+
 const FRAME_FRAGMENT_SHADER = `precision highp float;
 
 in vec3 vObjectPosition;
@@ -874,11 +814,7 @@ float packedBrightThreshold(vec3 color) {
   return smoothstep(0.52, 0.92, quantizedBrightness);
 }
 
-float hash21(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}
+${HASH21}
 
 vec3 studioEnvironment(vec3 direction) {
   direction = normalize(direction);
@@ -1147,6 +1083,7 @@ void main() {
 type Point = [number, number, number];
 
 type GeometryData = {
+  faceVertices: Float32Array;
   frameVertices: Float32Array;
   frameIndices: Uint16Array;
 };
@@ -1304,6 +1241,17 @@ function buildIcosahedron(): GeometryData {
     }
   }
 
+  // Outward-wound triangles in FACE_NORMALS order. The vertex shader gets
+  // the entry face directly from the three consecutive vertices of each face.
+  const faces = [
+    [0, 5, 1], [0, 1, 7], [0, 11, 5], [0, 7, 10],
+    [0, 10, 11], [1, 5, 9], [1, 8, 7], [1, 9, 8],
+    [2, 3, 4], [2, 6, 3], [2, 4, 11], [2, 10, 6],
+    [2, 11, 10], [3, 9, 4], [3, 6, 8], [3, 8, 9],
+    [4, 9, 5], [4, 5, 11], [6, 7, 8], [6, 10, 7],
+  ];
+  const faceVertices = faces.flatMap(face => face.flatMap(index => vertices[index]));
+
   const frameVertices: number[] = [];
   const frameIndices: number[] = [];
   for (let i = 0; i < vertices.length; i++) {
@@ -1320,6 +1268,7 @@ function buildIcosahedron(): GeometryData {
   }
 
   return {
+    faceVertices: new Float32Array(faceVertices),
     frameVertices: new Float32Array(frameVertices),
     frameIndices: new Uint16Array(frameIndices),
   };
@@ -1461,16 +1410,11 @@ export function mountMirrorChamber(
     const faceV = new Float32Array(FACE_V_AXES.flat());
     const pairAxes = new Float32Array(OPPOSITE_FACE_PAIRS.flatMap(([face]) => [...FACE_NORMALS[face], 1.239660977]));
     const pairFaces = new Int32Array(OPPOSITE_FACE_PAIRS.flat());
-    type Target = {
-      framebuffer: WebGLFramebuffer | null;
-      colorTexture: WebGLTexture | null;
-      depthTexture: WebGLTexture | null;
-      width: number;
-      height: number;
-    };
     type Program = { program: WebGLProgram; uniforms: Record<string, WebGLUniformLocation | null> };
-    const frameTarget: Target = { framebuffer: null, colorTexture: null, depthTexture: null, width: 0, height: 0 };
-    const renderTarget: Target = { framebuffer: null, colorTexture: null, depthTexture: null, width: 0, height: 0 };
+    let frameFramebuffer: WebGLFramebuffer;
+    let mirrorFramebuffer: WebGLFramebuffer;
+    let sceneColor: WebGLTexture;
+    let frameDepth: WebGLTexture;
     const owned = {
       programs: new Set<WebGLProgram>(),
       shaders: new Set<WebGLShader>(),
@@ -1480,6 +1424,8 @@ export function mountMirrorChamber(
       framebuffers: new Set<WebGLFramebuffer>(),
     };
     let frameProgram: Program;
+    let backgroundProgram: Program;
+    let faceVao: WebGLVertexArrayObject;
     let sceneProgram: Program;
     let postProgram: Program;
     let frameVao: WebGLVertexArrayObject;
@@ -1491,17 +1437,6 @@ export function mountMirrorChamber(
       set.add(value);
       return value;
     }
-    const forgetTargets = () => {
-      for (const target of [frameTarget, renderTarget]) {
-        target.framebuffer = null;
-        target.colorTexture = null;
-        target.depthTexture = null;
-        target.width = 0;
-        target.height = 0;
-      }
-      renderWidth = 0;
-      renderHeight = 0;
-    };
     const releaseResources = (deleteHandles: boolean) => {
       if (deleteHandles) {
         for (const value of owned.framebuffers) gl.deleteFramebuffer(value);
@@ -1512,12 +1447,12 @@ export function mountMirrorChamber(
         for (const value of owned.shaders) gl.deleteShader(value);
       }
       for (const set of Object.values(owned)) set.clear();
-      forgetTargets();
+      renderWidth = 0;
+      renderHeight = 0;
     };
     disposeSceneResources = () => releaseResources(!contextLost);
     const compileShader = (type: number, source: string) => {
       const shader = own(gl.createShader(type), owned.shaders, "shader");
-      // The bodies are identical to the portable renderer's GLSL3 shaders.
       gl.shaderSource(shader, "#version 300 es\n" + source);
       gl.compileShader(shader);
       return shader;
@@ -1541,26 +1476,30 @@ export function mountMirrorChamber(
       gl.cullFace(gl.BACK);
       gl.frontFace(gl.CCW);
       gl.colorMask(true, true, true, true);
-      gl.clearColor(0, 0, 0, 1);
+      gl.clearColor(20 / 255, 20 / 255, 20 / 255, 0);
       gl.clearDepth(1);
       gl.depthRange(0, 1);
       gl.depthFunc(gl.LESS);
       const frameVertex = compileShader(gl.VERTEX_SHADER, FRAME_VERTEX_SHADER);
       const frameFragment = compileShader(gl.FRAGMENT_SHADER, FRAME_FRAGMENT_SHADER);
       const fullscreenVertex = compileShader(gl.VERTEX_SHADER, VERTEX_SHADER);
+      const faceVertex = compileShader(gl.VERTEX_SHADER, FACE_VERTEX_SHADER);
+      const floorVertex = compileShader(gl.VERTEX_SHADER, FLOOR_VERTEX_SHADER);
+      const backgroundFragment = compileShader(gl.FRAGMENT_SHADER, BACKGROUND_FRAGMENT_SHADER);
       const sceneFragment = compileShader(gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
       const postFragment = compileShader(gl.FRAGMENT_SHADER, POST_FRAGMENT_SHADER);
-      // Queue all three links before synchronizing on any result. The two
-      // fullscreen programs share one compiled vertex shader.
+      // Queue every link before synchronizing on any result.
       frameProgram = createProgram(frameVertex, frameFragment);
-      sceneProgram = createProgram(fullscreenVertex, sceneFragment);
+      sceneProgram = createProgram(faceVertex, sceneFragment);
+      backgroundProgram = createProgram(floorVertex, backgroundFragment);
       postProgram = createProgram(fullscreenVertex, postFragment);
       const programs = [
         { record: frameProgram, shaders: [frameVertex, frameFragment], names: ["uResolution", "uTime", "uRotation", "uZoom"] },
-        { record: sceneProgram, shaders: [fullscreenVertex, sceneFragment], names: [
+        { record: backgroundProgram, shaders: [floorVertex, backgroundFragment], names: ["uResolution", "uZoom"] },
+        { record: sceneProgram, shaders: [faceVertex, sceneFragment], names: [
           "uResolution", "uPixelFootprint", "uTime", "uRotation", "uZoom",
           "uBounceLighting", "uBounceTint", "uFaceNormal", "uFaceU", "uFaceV",
-          "uPairAxis", "uPairFaces", "uFrameDepth", "uFrameColor",
+          "uPairAxis", "uPairFaces", "uFrameDepth",
         ] },
         { record: postProgram, shaders: [fullscreenVertex, postFragment], names: ["uScene", "uTexel", "uZoom"] },
       ];
@@ -1585,7 +1524,6 @@ export function mountMirrorChamber(
       gl.uniform4fv(sceneProgram.uniforms.uPairAxis, pairAxes);
       gl.uniform2iv(sceneProgram.uniforms.uPairFaces, pairFaces);
       gl.uniform1i(sceneProgram.uniforms.uFrameDepth, 0);
-      gl.uniform1i(sceneProgram.uniforms.uFrameColor, 1);
       gl.useProgram(postProgram.program);
       gl.uniform1i(postProgram.uniforms.uScene, 0);
 
@@ -1596,6 +1534,14 @@ export function mountMirrorChamber(
       gl.bufferData(gl.ARRAY_BUFFER, fullscreenVertices, gl.STATIC_DRAW);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
+
+      faceVao = own(gl.createVertexArray(), owned.vaos, "vertex array");
+      gl.bindVertexArray(faceVao);
+      const faceBuffer = own(gl.createBuffer(), owned.buffers, "buffer");
+      gl.bindBuffer(gl.ARRAY_BUFFER, faceBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, geometry.faceVertices, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
 
       frameVao = own(gl.createVertexArray(), owned.vaos, "vertex array");
       gl.bindVertexArray(frameVao);
@@ -1612,26 +1558,11 @@ export function mountMirrorChamber(
       gl.bindVertexArray(null);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
     };
-    const deleteTarget = (target: Target) => {
-      if (target.framebuffer) {
-        gl.deleteFramebuffer(target.framebuffer);
-        owned.framebuffers.delete(target.framebuffer);
-      }
-      for (const texture of [target.colorTexture, target.depthTexture]) {
-        if (texture) {
-          gl.deleteTexture(texture);
-          owned.textures.delete(texture);
-        }
-      }
-      target.framebuffer = null;
-      target.colorTexture = null;
-      target.depthTexture = null;
-      target.width = 0;
-      target.height = 0;
-    };
-    const createTarget = (target: Target, width: number, height: number, withDepth: boolean) => {
-      target.framebuffer = own(gl.createFramebuffer(), owned.framebuffers, "framebuffer");
-      gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
+    const resizeTargets = (width: number, height: number) => {
+      for (const framebuffer of owned.framebuffers) gl.deleteFramebuffer(framebuffer);
+      for (const texture of owned.textures) gl.deleteTexture(texture);
+      owned.framebuffers.clear();
+      owned.textures.clear();
       const texture = (format: number, filter: number) => {
         const value = own(gl.createTexture(), owned.textures, "texture");
         gl.bindTexture(gl.TEXTURE_2D, value);
@@ -1642,17 +1573,22 @@ export function mountMirrorChamber(
         gl.texStorage2D(gl.TEXTURE_2D, 1, format, width, height);
         return value;
       };
-      target.colorTexture = texture(gl.RGBA8, withDepth ? gl.NEAREST : gl.LINEAR);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target.colorTexture, 0);
-      if (withDepth) {
-        target.depthTexture = texture(gl.DEPTH_COMPONENT24, gl.NEAREST);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, target.depthTexture, 0);
-      }
-      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
-        throw new Error("Unable to create a complete WebGL render target.");
-      }
-      target.width = width;
-      target.height = height;
+      sceneColor = texture(gl.RGBA8, gl.LINEAR);
+      frameDepth = texture(gl.DEPTH_COMPONENT24, gl.NEAREST);
+      // Both passes write the same color image. Only the frame pass attaches
+      // depth, so the mirror pass can safely sample it before tracing a ray.
+      const framebuffer = (depth: WebGLTexture | null) => {
+        const value = own(gl.createFramebuffer(), owned.framebuffers, "framebuffer");
+        gl.bindFramebuffer(gl.FRAMEBUFFER, value);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneColor, 0);
+        if (depth) gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depth, 0);
+        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+          throw new Error("Unable to create a complete WebGL render target.");
+        }
+        return value;
+      };
+      frameFramebuffer = framebuffer(frameDepth);
+      mirrorFramebuffer = framebuffer(null);
     };
     const abandonLostResources = () => {
       contextLost = true;
@@ -1696,12 +1632,9 @@ export function mountMirrorChamber(
       const height = Math.max(1, Math.round(canvas.clientHeight * pixelRatio));
       if (width === renderWidth && height === renderHeight) return;
 
-      deleteTarget(frameTarget);
-      deleteTarget(renderTarget);
       canvas.width = width;
       canvas.height = height;
-      createTarget(frameTarget, width, height, true);
-      createTarget(renderTarget, width, height, false);
+      resizeTargets(width, height);
       renderWidth = width;
       renderHeight = height;
       gl.viewport(0, 0, width, height);
@@ -1709,11 +1642,42 @@ export function mountMirrorChamber(
       const pixelFootprint = (2 * 0.79) / (2.18 * height);
       gl.useProgram(frameProgram.program);
       gl.uniform2f(frameProgram.uniforms.uResolution, width, height);
+      gl.useProgram(backgroundProgram.program);
+      gl.uniform2f(backgroundProgram.uniforms.uResolution, width, height);
       gl.useProgram(sceneProgram.program);
       gl.uniform2f(sceneProgram.uniforms.uResolution, width, height);
       gl.uniform1f(sceneProgram.uniforms.uPixelFootprint, pixelFootprint);
       gl.useProgram(postProgram.program);
       gl.uniform2f(postProgram.uniforms.uTexel, 1 / width, 1 / height);
+    };
+
+    // Crop the final pass to the projected supports of the frame, glass and
+    // floor shadow, expanded for bloom and the chromatic texture offsets.
+    const cropPost = (zoom: number) => {
+      const scale = (2.18 / 0.79) * renderHeight * 0.5;
+      const radius = ICOSAHEDRON_RADIUS + FRAME_RADIUS;
+      const near = zoom - radius;
+      if (near <= 0) return false;
+      const shadowNear = zoom - SHADOW_HALF_DEPTH;
+      // The tangent to the floor ellipse bounds its horizontal projection.
+      const halfWidth = shadowNear > 0 ? scale * Math.max(
+        radius / near, SHADOW_HALF_WIDTH / Math.sqrt(shadowNear * (zoom + SHADOW_HALF_DEPTH)),
+      ) : renderWidth;
+      const bottom = scale * Math.max((radius + 0.10) / near,
+        shadowNear > 0 ? 1.60 / shadowNear : renderHeight / scale);
+      const top = scale * (radius - 0.10) / near;
+      // Bloom reaches 16 texels. Chroma shifts by up to 0.00011 of each
+      // dimension and uses a bilinear sample. Round both bounds outwards.
+      const padding = Math.max(17, 1 + 0.00011 * Math.max(renderWidth, renderHeight));
+      const x = Math.max(0, Math.floor(renderWidth * 0.5 - halfWidth - padding));
+      const y = Math.max(0, Math.floor(renderHeight * 0.5 - bottom - padding));
+      const h = Math.min(renderHeight, Math.ceil(renderHeight * 0.5 + top + padding)) - y;
+      if (x === 0 && h === renderHeight) return false;
+
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(x, y, renderWidth - 2 * x, h);
+      return true;
     };
 
     const startedAt = performance.now();
@@ -1788,10 +1752,15 @@ export function mountMirrorChamber(
         const elapsedSeconds = (now - startedAt) / 1000;
         writeQuaternionMatrix(controls.shownRotation, rotationMatrix);
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, frameTarget.framebuffer);
-        gl.enable(gl.DEPTH_TEST);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, frameFramebuffer);
+        gl.disable(gl.DEPTH_TEST);
         gl.depthMask(true);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.useProgram(backgroundProgram.program);
+        gl.uniform1f(backgroundProgram.uniforms.uZoom, controls.zoom);
+        gl.bindVertexArray(null);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.enable(gl.DEPTH_TEST);
         gl.useProgram(frameProgram.program);
         gl.uniformMatrix3fv(frameProgram.uniforms.uRotation, false, rotationMatrix);
         gl.uniform1f(frameProgram.uniforms.uTime, elapsedSeconds);
@@ -1799,28 +1768,28 @@ export function mountMirrorChamber(
         gl.bindVertexArray(frameVao);
         gl.drawElements(gl.TRIANGLES, geometry.frameIndices.length, gl.UNSIGNED_SHORT, 0);
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.framebuffer);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, mirrorFramebuffer);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, frameDepth);
         gl.disable(gl.DEPTH_TEST);
         gl.depthMask(false);
-        gl.clear(gl.COLOR_BUFFER_BIT);
         gl.useProgram(sceneProgram.program);
         gl.uniformMatrix3fv(sceneProgram.uniforms.uRotation, false, rotationMatrix);
         gl.uniform1f(sceneProgram.uniforms.uTime, elapsedSeconds);
         gl.uniform1f(sceneProgram.uniforms.uZoom, controls.zoom);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, frameTarget.depthTexture);
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, frameTarget.colorTexture);
+        gl.bindVertexArray(faceVao);
+        gl.drawArrays(gl.TRIANGLES, 0, geometry.faceVertices.length / 3);
         gl.bindVertexArray(fullscreenVao);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
         frameSync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        const cropped = cropPost(controls.zoom);
         gl.useProgram(postProgram.program);
         gl.uniform1f(postProgram.uniforms.uZoom, controls.zoom);
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, renderTarget.colorTexture);
+        gl.bindTexture(gl.TEXTURE_2D, sceneColor);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
+        if (cropped) gl.disable(gl.SCISSOR_TEST);
         gl.flush();
         renderTimer = window.setTimeout(render, Math.ceil(1000 / 60));
       } catch (caught) {
