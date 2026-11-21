@@ -338,7 +338,7 @@ deepseek-v4.1-flash-1017_medium,DeepSeek V4.1 Flash 1017,2026-10-17,DeepSeek V4.
 deepseek-v4.1-flash-1017_none,DeepSeek V4.1 Flash 1017,2026-10-17,DeepSeek V4.1 Flash 1017 (none),DeepSeek,China,Open weights (unrestricted),
 deepseek-v4.1-flash-1017_unknown,DeepSeek V4.1 Flash 1017,2026-10-17,DeepSeek V4.1 Flash 1017 (unknown),DeepSeek,China,Open weights (unrestricted),
 deepseek/deepseek-v3.2,DeepSeek-V3.2,2025-12-01,DeepSeek-V3.2 (Thinking; Novita),DeepSeek,China,Open weights (unrestricted),4.2e+24
-devstral-small-2505,Devstral Small,2025-05-21,,"Mistral AI,All Hands AI","France,United States of America",Open weights (unrestricted),
+devstral-small-2505,Devstral Small,2025-05-21,,"Mistral AI,All Hands AI","United States of America,France",Open weights (unrestricted),
 devstral-small-2512,Devstral Small 2,2025-12-09,Devstral Small 2,Mistral AI,France,Open weights (unrestricted),
 dolly-v2-12b,Dolly 2.0-12b,2023-04-11,,Databricks,United States of America,Open weights (unrestricted),
 doubao-pro-32k,Doubao-pro,2024-10-28,,ByteDance,China,API access,2.505e+25
@@ -369,7 +369,7 @@ doubao-seed-evolving_none,Doubao Seed Evolving (Nov 2026),2026-11-02,"Doubao See
 doubao-seed-evolving_unknown,Doubao Seed Evolving (Nov 2026),2026-11-02,"Doubao Seed Evolving (Nov 2026, unknown)",ByteDance,China,API access,
 Dracarys2-72B-Instruct,Dracarys2-72B-Instruct,2024-09-30,,,,,
 Dracarys2-Llama-3.1-70B-Instruct,Dracarys2-Llama-3.1-70B-Instruct,2024-08-14,,,,,
-Eurus-2-7B-PRIME,Eurus-2-7B-PRIME,2024-12-31,,"Tsinghua University,University of Illinois Urbana-Champaign (UIUC),Shanghai AI Lab,Peking University,Shanghai Jiao Tong University,CUHK Shenzhen Research Institute","United States of America,China",Open weights (unrestricted),4.01915904e+20
+Eurus-2-7B-PRIME,Eurus-2-7B-PRIME,2024-12-31,,"Tsinghua University,University of Illinois Urbana-Champaign (UIUC),Shanghai AI Lab,Peking University,Shanghai Jiao Tong University,CUHK Shenzhen Research Institute","China,United States of America",Open weights (unrestricted),4.01915904e+20
 EXAONE-Deep-32B,EXAONE Deep 32B,2025-03-18,,LG AI Research,South Korea,Open weights (non-commercial),1.26e+24
 falcon-7b,Falcon-7B,2023-04-24,,Technology Innovation Institute,United Arab Emirates,Open weights (unrestricted),6.3e+22
 falcon-11b,Falcon 2 11B,2024-05-09,Falcon 2-11B,Technology Innovation Institute,United Arab Emirates,Open weights (restricted use),3.6e+23
@@ -482,6 +482,11 @@ gemini-4-hydrogen_low,Gemini 4 Hydrogen,2026-11-12,Gemini 4 Hydrogen (low),Googl
 gemini-4-hydrogen_medium,Gemini 4 Hydrogen,2026-11-12,Gemini 4 Hydrogen (medium),Google DeepMind,United States of America,API access,
 gemini-4-hydrogen_unknown,Gemini 4 Hydrogen,2026-11-12,Gemini 4 Hydrogen (unknown),Google DeepMind,United States of America,API access,
 gemini-4-hydrogen_xhigh,Gemini 4 Hydrogen,2026-11-12,Gemini 4 Hydrogen (xhigh),Google DeepMind,United States of America,API access,
+gemini-4-neon_high,Gemini 4 Neon,2026-11-18,Gemini 4 Neon (high),Google DeepMind,United States of America,API access,
+gemini-4-neon_low,Gemini 4 Neon,2026-11-18,Gemini 4 Neon (low),Google DeepMind,United States of America,API access,
+gemini-4-neon_medium,Gemini 4 Neon,2026-11-18,Gemini 4 Neon (medium),Google DeepMind,United States of America,API access,
+gemini-4-neon_unknown,Gemini 4 Neon,2026-11-18,Gemini 4 Neon (unknown),Google DeepMind,United States of America,API access,
+gemini-4-neon_xhigh,Gemini 4 Neon,2026-11-18,Gemini 4 Neon (xhigh),Google DeepMind,United States of America,API access,
 gemini-exp-1206,Gemini 2.0 Flash (Dec 2024),2024-12-06,,"Google DeepMind,Google",United States of America,API access,
 gemini-robotics-er-1.5-preview,gemini-robotics-er-1.5-preview,2025-09-26,,,,,
 gemini-robotics-er-1.6-preview,Gemini Robotics-ER 1.6,2026-04-14,Gemini Robotics-ER 1.6 Preview,Google,United States of America,API access,
@@ -698,7 +703,13 @@ gpt-6.1-terra_medium,GPT-6.1 Terra,2026-10-26,GPT-6.1 Terra (medium),OpenAI,Unit
 gpt-6.1-terra_none,GPT-6.1 Terra,2026-10-26,GPT-6.1 Terra (none),OpenAI,United States of America,API access,
 gpt-6.1-terra_unknown,GPT-6.1 Terra,2026-10-26,GPT-6.1 Terra (unknown thinking),OpenAI,United States of America,API access,
 gpt-6.1-terra_xhigh,GPT-6.1 Terra,2026-10-26,GPT-6.1 Terra (xhigh),OpenAI,United States of America,API access,
+gpt-6.2-astra_high,GPT-6.2 Astra,2026-11-17,GPT-6.2 Astra (high),OpenAI,United States of America,API access,
+gpt-6.2-astra_low,GPT-6.2 Astra,2026-11-17,GPT-6.2 Astra (low),OpenAI,United States of America,API access,
 gpt-6.2-astra_max,GPT-6.2 Astra,2026-11-17,GPT-6.2 Astra (max),OpenAI,United States of America,API access,
+gpt-6.2-astra_medium,GPT-6.2 Astra,2026-11-17,GPT-6.2 Astra (medium),OpenAI,United States of America,API access,
+gpt-6.2-astra_promax,GPT-6.2 Astra,2026-11-17,"GPT-6.2 Astra (pro, max)",OpenAI,United States of America,API access,
+gpt-6.2-astra_unknown,GPT-6.2 Astra,2026-11-17,GPT-6.2 Astra (unknown thinking),OpenAI,United States of America,API access,
+gpt-6.2-astra_xhigh,GPT-6.2 Astra,2026-11-17,GPT-6.2 Astra (xhigh),OpenAI,United States of America,API access,
 gpt-6.2-sol_high,GPT-6.2 Sol,2026-11-17,GPT-6.2 Sol (high),OpenAI,United States of America,API access,
 gpt-6.2-sol_low,GPT-6.2 Sol,2026-11-17,GPT-6.2 Sol (low),OpenAI,United States of America,API access,
 gpt-6.2-sol_max,GPT-6.2 Sol,2026-11-17,GPT-6.2 Sol (max),OpenAI,United States of America,API access,
@@ -789,7 +800,7 @@ internlm-chat-20b,internlm-chat-20b,2023-09-17,,,,,
 InternVL-Chat-V1-5,InternVL-Chat-V1-5,2024-04-18,,,,,
 InternVL-Chat-ViT-6B-Vicuna-7B,InternVL-Chat-ViT-6B-Vicuna-7B,2023-12-25,,,,,
 InternVL-Chat-ViT-6B-Vicuna-13B,InternVL-Chat-ViT-6B-Vicuna-13B,2024-08-16,,,,,
-InternVL2_5-78B,InternVL2_5-78B,2024-12-06,,"Shanghai AI Lab,SenseTime,Tsinghua University,Nanjing University,Fudan University,Chinese University of Hong Kong (CUHK),Shanghai Jiao Tong University","Hong Kong,China",Open weights (restricted use),
+InternVL2_5-78B,InternVL2_5-78B,2024-12-06,,"Shanghai AI Lab,SenseTime,Tsinghua University,Nanjing University,Fudan University,Chinese University of Hong Kong (CUHK),Shanghai Jiao Tong University","China,Hong Kong",Open weights (restricted use),
 InternVL2-40B,InternVL2-40B,2024-07-08,,Shanghai AI Lab,China,Open weights (unrestricted),
 jev-1.14.0,Jev,2026-10-14,Jev 1.14,TypeSafe.ai,United States of America,API access,
 kangaroo,kangaroo,2024-11-13,,,,,
@@ -989,7 +1000,7 @@ nova-2.0-pro-preview_medium,Nova 2.0 Pro Preview,2025-12-02,Nova 2.0 Pro Preview
 nova-2.0-pro-preview_none,Nova 2.0 Pro Preview,2025-12-02,Nova 2.0 Pro Preview (none),Amazon,United States of America,API access,
 nova-2.0-pro-preview_unknown,Nova 2.0 Pro Preview,2025-12-02,Nova 2.0 Pro Preview (unknown),Amazon,United States of America,API access,
 nvidia-nemotron-nano-9b-v2,nvidia-nemotron-nano-9b-v2,2025-08-18,,,,,
-NVILA-8B,NVILA 8B,2024-12-10,,"Nvidia,Massachusetts Institute of Technology (MIT),University of California (UC) Berkeley,University of California San Diego,University of Washington,Tsinghua University","United States of America,China",Open weights (non-commercial),2.2794518e+21
+NVILA-8B,NVILA 8B,2024-12-10,,"Nvidia,Massachusetts Institute of Technology (MIT),University of California (UC) Berkeley,University of California San Diego,University of Washington,Tsinghua University","China,United States of America",Open weights (non-commercial),2.2794518e+21
 o,Codex,2021-07-07,,OpenAI,United States of America,API access,7.344e+22
 o1-2024-12-17_high,o1,2024-12-17,o1 (high),OpenAI,United States of America,API access,
 o1-2024-12-17_low,o1,2024-12-17,o1 (low),OpenAI,United States of America,API access,
@@ -1169,6 +1180,11 @@ qwen3.8-max_unknown,Qwen 3.8 Max,2026-08-02,Qwen3.8 Max (unknown),Alibaba,China,
 qwen3.8-max_xhigh,Qwen 3.8 Max,2026-08-02,Qwen3.8 Max (xhigh),Alibaba,China,API access,
 qwen3.8-max-0902_unknown,Qwen3.8 Max (0902),2026-09-01,Qwen3.8 Max (0902) (unknown),Alibaba,China,API access,
 qwen3.8-max-0902_xhigh,Qwen3.8 Max (0902),2026-09-01,Qwen3.8 Max (0902) (xhigh),Alibaba,China,API access,
+qwen4-max_high,Qwen4-Max,2026-11-16,Qwen4-Max (high),Alibaba,China,API access,
+qwen4-max_low,Qwen4-Max,2026-11-16,Qwen4-Max (low),Alibaba,China,API access,
+qwen4-max_none,Qwen4-Max,2026-11-16,Qwen4-Max (none),Alibaba,China,API access,
+qwen4-max_unknown,Qwen4-Max,2026-11-16,Qwen4-Max (unknown),Alibaba,China,API access,
+qwen4-max_xhigh,Qwen4-Max,2026-11-16,Qwen4-Max (xhigh),Alibaba,China,API access,
 QwQ-32B,QwQ-32B,2025-03-05,,Alibaba,China,Open weights (unrestricted),3.51e+24
 QwQ-32B (16K thinking),QwQ-32B,2025-03-05,,Alibaba,China,Open weights (unrestricted),3.51e+24
 QwQ-32B-Preview,QwQ-32B-Preview,2024-11-28,,Alibaba,China,Open weights (unrestricted),3.51e+24
