@@ -1,6 +1,7 @@
-// Everything on /ai-frontier-forecast is derived from Epoch AI's raw CSVs (src/data/epoch/, refreshed with
-// `npm run update:epoch`) by the formulas below. Nothing here is hand-entered model data, so new
-// data flows through to the frontier, trend line, milestone dates and time-horizon predictions.
+// Everything on /ai-frontier-forecast is derived from Epoch AI's raw CSVs (src/data/epoch/) and METR's
+// time-horizon data (src/data/metr/), both refreshed with `npm run update:forecast`, by the formulas below.
+// Nothing here is hand-entered model data, so new data flows through to the frontier, trend line,
+// milestone dates and time-horizon predictions.
 
 // ---------------------------------------------------------------------------------------------
 // Configuration
@@ -126,8 +127,21 @@ export const MILESTONES = [
  */
 export const TREND_START_DATE = "2024-01-01";
 
-/** METR suite preferred when a model has several time-horizon measurements. */
-const PREFERRED_METR_VERSION = "METR-Horizon-v1.1";
+/**
+ * The METR time-horizon series the ECI → time-horizon formula is fit on, from the per-model data
+ * METR publishes with its capability updates (src/data/metr/; the source URL is in tools/forecast-data/update.mjs). "TH1.1 and TH2"
+ * scores each model on the combined TH1.1 and TH2 task suites; recent models have saturated
+ * TH1.1 alone, and TH2 alone has too few models to fit.
+ */
+export const METR_SERIES = "TH1.1 and TH2";
+
+/** Epoch model names for METR models whose name differs from Epoch's. Every METR model must match one. */
+export const METR_MODEL_NAMES: Record<string, string> = {
+  "GPT-4o": "GPT-4o (May 2024)",
+};
+
+/** z for a 95% interval: converts the 95% CIs (METR's horizons, Epoch's ECIs) to standard errors. */
+const Z95 = 1.959964;
 
 // ---------------------------------------------------------------------------------------------
 // Types
@@ -198,18 +212,19 @@ export function fromYear(x: number): number {
   return Date.UTC(y, 0, 1) + (x - y) * YEAR_MS;
 }
 
-/** Ordinary least squares fit of ys on xs. */
-export function linearFit(xs: number[], ys: number[]): LinearFit {
+/** Least squares fit of ys on xs, weighted by ws when given (ordinary least squares otherwise). */
+export function linearFit(xs: number[], ys: number[], ws: number[] = xs.map(() => 1)): LinearFit {
   const n = xs.length;
-  const mx = xs.reduce((s, x) => s + x, 0) / n;
-  const my = ys.reduce((s, y) => s + y, 0) / n;
+  const w = ws.reduce((s, v) => s + v, 0);
+  const mx = xs.reduce((s, x, i) => s + ws[i] * x, 0) / w;
+  const my = ys.reduce((s, y, i) => s + ws[i] * y, 0) / w;
   let sxy = 0;
   let sxx = 0;
   let syy = 0;
   for (let i = 0; i < n; i++) {
-    sxy += (xs[i] - mx) * (ys[i] - my);
-    sxx += (xs[i] - mx) ** 2;
-    syy += (ys[i] - my) ** 2;
+    sxy += ws[i] * (xs[i] - mx) * (ys[i] - my);
+    sxx += ws[i] * (xs[i] - mx) ** 2;
+    syy += ws[i] * (ys[i] - my) ** 2;
   }
   const slope = sxy / sxx;
   return { slope, intercept: my - slope * mx, r2: (sxy * sxy) / (sxx * syy), n };
@@ -384,43 +399,75 @@ export function estimateOldModels(eciRows: Row[], metadataRows: Row[], benchmark
   return estimates.sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/** One model's METR measurement, placed at its Epoch ECI. Uncertainties are standard errors. */
+export interface HorizonPoint {
+  model: string;
+  eci: number;
+  /** ECI standard error (0 for Epoch's anchor models, whose ECI is fixed by definition). */
+  eciSe: number;
+  /** log2(50% time horizon in minutes). */
+  log2Minutes: number;
+  /** Standard error of log2Minutes below and above the estimate. METR's CIs are lopsided near the task ceiling. */
+  seDown: number;
+  seUp: number;
+}
+
+/** METR_SERIES's models from METR's figure data, matched to Epoch's ECI scores. */
+export function horizonPoints(eciRows: Row[], metrJson: string): HorizonPoint[] {
+  const eciByModel = new Map(eciRows.filter((r) => r["eci"]).map((r) => [r["Model"], r]));
+  const tables: { name: string; rows: Record<string, unknown>[] }[] = JSON.parse(metrJson).panels.flatMap((p: { tables: unknown[] }) => p.tables);
+  const rows = tables.find((t) => t.name === "models")?.rows.filter((r) => r["series"] === METR_SERIES) ?? [];
+  if (!rows.length) throw new Error(`No "${METR_SERIES}" models in the METR data`);
+  return rows.map((r) => {
+    const name = String(r["model"]);
+    const e = eciByModel.get(METR_MODEL_NAMES[name] ?? name);
+    if (!e) throw new Error(`METR model "${name}" has no Epoch ECI score; map it to Epoch's name in METR_MODEL_NAMES (src/scripts/ai-frontier-forecast-model.ts)`);
+    const log2 = (key: string) => {
+      const minutes = Number(r[key]);
+      if (!(minutes > 0)) throw new Error(`METR model "${name}" has no usable ${key} (${r[key]})`);
+      return Math.log2(minutes);
+    };
+    const y = log2("horizon_minutes");
+    const [lo, hi] = [Number(e["eci_ci_low"]), Number(e["eci_ci_high"])];
+    return {
+      model: name,
+      eci: Number(e["eci"]),
+      eciSe: lo && hi ? (hi - lo) / (2 * Z95) : 0,
+      log2Minutes: y,
+      seDown: (y - log2("horizon_minutes_low_95")) / Z95,
+      seUp: (log2("horizon_minutes_high_95") - y) / Z95,
+    };
+  });
+}
+
 /**
- * log2(METR 50% time horizon) regressed on ECI. One point per model that has both: METR rows
- * are matched to ECI models through Epoch's model metadata, and a model with several
- * measurements uses its PREFERRED_METR_VERSION one, else its longest.
+ * log2(METR 50% time horizon) regressed on ECI, by weighted least squares with each model
+ * weighted 1 / variance. A model's variance combines:
+ * - its horizon's standard error on the side of the line it falls on (seDown when the line passes
+ *   below it, seUp when above), since METR's CIs for the newest models stretch far upward where
+ *   tasks run out but are much tighter below;
+ * - its ECI standard error, carried into horizon units by the slope (slope × eciSe).
+ * Both depend on the line, so the fit is repeated until it settles.
  */
-export function horizonFit(eciRows: Row[], metrRows: Row[], metadataRows: Row[]): LinearFit {
-  const eciByModel = new Map(eciRows.map((r) => [r["Model"], Number(r["eci"])]));
-  const metadata = new Map(metadataRows.map((r) => [r["model_version"], r]));
-
-  const byModel = new Map<string, Row[]>();
-  for (const r of metrRows) {
-    const meta = metadata.get(r["Model version"]);
-    if (!meta) continue;
-    const key = eciByModel.has(meta["model_group"]) ? meta["model_group"] : eciByModel.has(meta["display_name"]) ? meta["display_name"] : null;
-    if (key === null) continue;
-    if (!byModel.has(key)) byModel.set(key, []);
-    byModel.get(key)!.push(r);
+export function horizonFit(points: HorizonPoint[]): LinearFit {
+  const xs = points.map((p) => p.eci);
+  const ys = points.map((p) => p.log2Minutes);
+  let fit = linearFit(xs, ys);
+  for (let i = 0; i < 100; i++) {
+    const ws = points.map((p) => {
+      const se = evaluate(fit, p.eci) > p.log2Minutes ? p.seUp : p.seDown;
+      return 1 / (se ** 2 + (fit.slope * p.eciSe) ** 2);
+    });
+    const next = linearFit(xs, ys, ws);
+    const settled = Math.abs(next.slope - fit.slope) < 1e-12 && Math.abs(next.intercept - fit.intercept) < 1e-12;
+    fit = next;
+    if (settled) break;
   }
-
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (const [key, rows] of byModel) {
-    const usable = rows.filter((r) => Number(r["Time horizon"]) > 0);
-    if (!usable.length) continue;
-    const pick =
-      usable.find((r) => r["METR version"] === PREFERRED_METR_VERSION) ??
-      usable.reduce((a, b) => (Number(b["Time horizon"]) > Number(a["Time horizon"]) ? b : a));
-    const eci = eciByModel.get(key)!;
-    if (!Number.isFinite(eci)) continue;
-    xs.push(eci);
-    ys.push(Math.log2(Number(pick["Time horizon"])));
-  }
-  return linearFit(xs, ys);
+  return fit;
 }
 
 /** The full page model from Epoch's raw CSV text. */
-export function buildForecast(csv: { eci: string; metr: string; metadata: string; benchmarks: Record<string, string> }): Forecast {
+export function buildForecast(csv: { eci: string; metrJson: string; metadata: string; benchmarks: Record<string, string> }): Forecast {
   const eciRows = parseCsv(csv.eci);
   const metadataRows = parseCsv(csv.metadata);
   const benchmarkRows = Object.fromEntries(Object.entries(csv.benchmarks).map(([file, text]) => [file, parseCsv(text)]));
@@ -431,7 +478,7 @@ export function buildForecast(csv: { eci: string; metr: string; metadata: string
     fitted.map((p) => toYear(p.date)),
     fitted.map((p) => p.eci),
   );
-  const horizon = horizonFit(eciRows, parseCsv(csv.metr), metadataRows);
+  const horizon = horizonFit(horizonPoints(eciRows, csv.metrJson));
   const milestones = MILESTONES.map(({ label, eci }) => {
     const year = trendYear(trend, eci);
     return { label, eci, date: year === null ? null : Math.round(fromYear(year)) };

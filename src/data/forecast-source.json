@@ -1,0 +1,10 @@
+{
+  "retrieved": "2026-11-25",
+  "epoch": {
+    "url": "https://epoch.ai/data/benchmark_data.zip"
+  },
+  "metr": {
+    "page": "https://metr.org/blog/2026-11-20-q4-2026-capability-update/",
+    "url": "https://metr.org/assets/images/q4-2026-capability-update/cad6b5d98261f80c.json"
+  }
+}

@@ -1,19 +1,19 @@
 ---
 import Layout from "@/layouts/Layout.astro";
 import eciCsv from "@/data/epoch/eci_scores.csv?raw";
-import metrCsv from "@/data/epoch/metr_time_horizons_external.csv?raw";
+import metrJson from "@/data/metr/time_horizons.json?raw";
 import metadataCsv from "@/data/epoch/model_metadata.csv?raw";
-import source from "@/data/epoch/source.json";
+import source from "@/data/forecast-source.json";
 import { buildForecast, formatDuration, formatEciRate, horizonMinutes, toYear, trendRate, trendSlopeAt } from "@/scripts/ai-frontier-forecast-model";
 
-// Computed at build time from Epoch's raw data; refresh it with `npm run update:epoch`.
+// Computed at build time from Epoch's and METR's raw data; refresh both with `npm run update:forecast`.
 // Older benchmark scores, keyed by file stem (e.g. "mmlu"), for estimating pre-2023 models
 const benchmarkCsvs = Object.fromEntries(
   Object.entries(import.meta.glob<string>("../data/epoch/benchmarks/*_external.csv", { query: "?raw", import: "default", eager: true })).map(
     ([path, text]) => [path.replace(/^.*\/(.+)_external\.csv$/, "$1"), text],
   ),
 );
-const model = buildForecast({ eci: eciCsv, metr: metrCsv, metadata: metadataCsv, benchmarks: benchmarkCsvs });
+const model = buildForecast({ eci: eciCsv, metrJson, metadata: metadataCsv, benchmarks: benchmarkCsvs });
 
 // Lab colors (validated categorical slots). Labs without a slot share the neutral "other" color.
 const ORG_COLORS: Record<string, string> = {
@@ -99,7 +99,8 @@ const pageData = JSON.stringify({ ...model, colors }).replace(/</g, "\\u003c");
   </figure>
 
   <p class="source">
-    Data: <a href="https://epoch.ai/eci?view=graph&tab=release-date" target="_blank" rel="noopener">Epoch AI, Capabilities Index</a> (CC BY 4.0), retrieved {source.retrieved}.
+    Data: <a href="https://epoch.ai/eci?view=graph&tab=release-date" target="_blank" rel="noopener">Epoch AI, Capabilities Index</a> and
+    <a href={source.metr.page} target="_blank" rel="noopener">METR time horizons</a> (TH1.1 + TH2), updated {source.retrieved}.
   </p>
 
   <script type="application/json" id="eci-data" set:html={pageData} />

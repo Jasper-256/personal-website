@@ -1,0 +1,92 @@
+{
+ "chart": "headline/panel2",
+ "title": "Across TH1.1 and TH2 we find that capabilities are still increasing quickly, doubling roughly every 3.6 months.",
+ "subtitle": "Doubling time CIs are calculated by bootstrapping over models, families, and runs. Model CIs are bootstrapped over families and runs. 80% CI intervals are shown as opaque lines and 95% CI intervals as faint lines.",
+ "panels": [
+  {
+   "title": "50% time horizon by model release date",
+   "x": {"label": "Model release date", "unit": "", "scale": "linear"},
+   "y": {"label": "50% time horizon", "unit": "minutes", "scale": "log"},
+   "tables": [
+    {
+     "name": "models",
+     "rows": [
+      {"series": "TH1.1 and TH2", "model": "GPT-4o", "released": "2024-05-13", "frontier": true, "horizon_minutes": 7.11244, "horizon_minutes_low_95": 3.81807, "horizon_minutes_high_95": 13.529, "horizon_minutes_low_80": 4.62173, "horizon_minutes_high_80": 10.7242},
+      {"series": "TH1.1 and TH2", "model": "o1", "released": "2024-12-05", "frontier": true, "horizon_minutes": 35.2501, "horizon_minutes_low_95": 15.6642, "horizon_minutes_high_95": 66.0704, "horizon_minutes_low_80": 21.082, "horizon_minutes_high_80": 53.8532},
+      {"series": "TH1.1 and TH2", "model": "GPT-5", "released": "2025-08-07", "frontier": true, "horizon_minutes": 180.559, "horizon_minutes_low_95": 97.8775, "horizon_minutes_high_95": 334.456, "horizon_minutes_low_80": 119.961, "horizon_minutes_high_80": 266.347},
+      {"series": "TH1.1 and TH2", "model": "Claude Opus 4.5", "released": "2025-11-24", "frontier": true, "horizon_minutes": 275.373, "horizon_minutes_low_95": 144.68, "horizon_minutes_high_95": 510.983, "horizon_minutes_low_80": 179.143, "horizon_minutes_high_80": 412.968},
+      {"series": "TH1.1 and TH2", "model": "Claude Opus 4.6", "released": "2026-02-05", "frontier": true, "horizon_minutes": 384.048, "horizon_minutes_low_95": 193.378, "horizon_minutes_high_95": 729.588, "horizon_minutes_low_80": 245.221, "horizon_minutes_high_80": 579.817},
+      {"series": "TH1.1 and TH2", "model": "GPT-5.4", "released": "2026-03-05", "frontier": false, "horizon_minutes": 356.668, "horizon_minutes_low_95": 199.457, "horizon_minutes_high_95": 592.046, "horizon_minutes_low_80": 246.711, "horizon_minutes_high_80": 502.137},
+      {"series": "TH1.1 and TH2", "model": "Claude Opus 4.7", "released": "2026-04-16", "frontier": true, "horizon_minutes": 502.97, "horizon_minutes_low_95": 257.936, "horizon_minutes_high_95": 937.606, "horizon_minutes_low_80": 328.035, "horizon_minutes_high_80": 750.485},
+      {"series": "TH1.1 and TH2", "model": "GPT-5.5", "released": "2026-04-23", "frontier": true, "horizon_minutes": 664.343, "horizon_minutes_low_95": 365.901, "horizon_minutes_high_95": 1116.4, "horizon_minutes_low_80": 464.167, "horizon_minutes_high_80": 935.812},
+      {"series": "TH1.1 and TH2", "model": "Claude Opus 4.8", "released": "2026-05-28", "frontier": true, "horizon_minutes": 710.613, "horizon_minutes_low_95": 366.906, "horizon_minutes_high_95": 1268.14, "horizon_minutes_low_80": 467.109, "horizon_minutes_high_80": 1027.66},
+      {"series": "TH1.1 and TH2", "model": "Claude Fable 5", "released": "2026-06-09", "frontier": true, "horizon_minutes": 934.74, "horizon_minutes_low_95": 534.843, "horizon_minutes_high_95": 1939.3, "horizon_minutes_low_80": 657.13, "horizon_minutes_high_80": 1393.64},
+      {"series": "TH1.1 and TH2", "model": "GPT-5.6 Sol", "released": "2026-07-09", "frontier": false, "horizon_minutes": 716.592, "horizon_minutes_low_95": 393.39, "horizon_minutes_high_95": 1239.23, "horizon_minutes_low_80": 485.701, "horizon_minutes_high_80": 1015.8},
+      {"series": "TH1.1 and TH2", "model": "Claude Opus 5", "released": "2026-07-24", "frontier": true, "horizon_minutes": 1194.81, "horizon_minutes_low_95": 566.788, "horizon_minutes_high_95": 5174.83, "horizon_minutes_low_80": 698.591, "horizon_minutes_high_80": 2386.5},
+      {"series": "TH1.1 and TH2", "model": "Claude Fable 5.1", "released": "2026-09-01", "frontier": true, "horizon_minutes": 1812.89, "horizon_minutes_low_95": 718.743, "horizon_minutes_high_95": 18464.1, "horizon_minutes_low_80": 872.55, "horizon_minutes_high_80": 5226.63},
+      {"series": "TH1.1 and TH2", "model": "GPT-6 Astra", "released": "2026-09-03", "frontier": true, "horizon_minutes": 2416.33, "horizon_minutes_low_95": 791.513, "horizon_minutes_high_95": 158701.0, "horizon_minutes_low_80": 1000.24, "horizon_minutes_high_80": 11319.2},
+      {"series": "TH1.1 and TH2", "model": "Claude Opus 5.5", "released": "2026-09-22", "frontier": false, "horizon_minutes": 2337.38, "horizon_minutes_low_95": 714.87, "horizon_minutes_high_95": 75176.6, "horizon_minutes_low_80": 932.42, "horizon_minutes_high_80": 10428.2}
+     ]
+    },
+    {
+     "name": "frontier trends",
+     "rows": [
+      {"series": "TH1.1 and TH2", "from": "2024-05-13", "to": "2026-09-03", "horizon_minutes_from": 8.08965, "horizon_minutes_to": 1643.2, "doubling_months": 3.61275, "doubling_months_low_95": 2.08267, "doubling_months_high_95": 4.93514, "r_squared": 0.985704}
+     ]
+    },
+    {
+     "name": "task limits",
+     "rows": [
+      {"task_set": "TH1.1", "longest_task_minutes": 1800.0},
+      {"task_set": "TH1.1 and TH2", "longest_task_minutes": 12000.0}
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Doubling times across bootstrap draws",
+   "x": {"label": "Months per doubling", "unit": "", "scale": "linear"},
+   "y": {"label": "Share of draws", "unit": "", "scale": "linear"},
+   "tables": [
+    {
+     "name": "doubling times across bootstrap draws",
+     "rows": [
+      {"series": "TH1.1 and TH2", "months_from": 0.0, "months_to": 0.25, "share_of_draws": 0.0005},
+      {"series": "TH1.1 and TH2", "months_from": 0.25, "months_to": 0.5, "share_of_draws": 0.0},
+      {"series": "TH1.1 and TH2", "months_from": 0.5, "months_to": 0.75, "share_of_draws": 0.0},
+      {"series": "TH1.1 and TH2", "months_from": 0.75, "months_to": 1.0, "share_of_draws": 0.001},
+      {"series": "TH1.1 and TH2", "months_from": 1.0, "months_to": 1.25, "share_of_draws": 0.0015},
+      {"series": "TH1.1 and TH2", "months_from": 1.25, "months_to": 1.5, "share_of_draws": 0.0055},
+      {"series": "TH1.1 and TH2", "months_from": 1.5, "months_to": 1.75, "share_of_draws": 0.0045},
+      {"series": "TH1.1 and TH2", "months_from": 1.75, "months_to": 2.0, "share_of_draws": 0.008},
+      {"series": "TH1.1 and TH2", "months_from": 2.0, "months_to": 2.25, "share_of_draws": 0.0115},
+      {"series": "TH1.1 and TH2", "months_from": 2.25, "months_to": 2.5, "share_of_draws": 0.018},
+      {"series": "TH1.1 and TH2", "months_from": 2.5, "months_to": 2.75, "share_of_draws": 0.0265},
+      {"series": "TH1.1 and TH2", "months_from": 2.75, "months_to": 3.0, "share_of_draws": 0.0625},
+      {"series": "TH1.1 and TH2", "months_from": 3.0, "months_to": 3.25, "share_of_draws": 0.1005},
+      {"series": "TH1.1 and TH2", "months_from": 3.25, "months_to": 3.5, "share_of_draws": 0.177},
+      {"series": "TH1.1 and TH2", "months_from": 3.5, "months_to": 3.75, "share_of_draws": 0.1945},
+      {"series": "TH1.1 and TH2", "months_from": 3.75, "months_to": 4.0, "share_of_draws": 0.1565},
+      {"series": "TH1.1 and TH2", "months_from": 4.0, "months_to": 4.25, "share_of_draws": 0.1095},
+      {"series": "TH1.1 and TH2", "months_from": 4.25, "months_to": 4.5, "share_of_draws": 0.0545},
+      {"series": "TH1.1 and TH2", "months_from": 4.5, "months_to": 4.75, "share_of_draws": 0.029},
+      {"series": "TH1.1 and TH2", "months_from": 4.75, "months_to": 5.0, "share_of_draws": 0.017},
+      {"series": "TH1.1 and TH2", "months_from": 5.0, "months_to": 5.25, "share_of_draws": 0.0075},
+      {"series": "TH1.1 and TH2", "months_from": 5.25, "months_to": 5.5, "share_of_draws": 0.0065},
+      {"series": "TH1.1 and TH2", "months_from": 5.5, "months_to": 5.75, "share_of_draws": 0.002},
+      {"series": "TH1.1 and TH2", "months_from": 5.75, "months_to": 6.0, "share_of_draws": 0.0015},
+      {"series": "TH1.1 and TH2", "months_from": 6.0, "months_to": 6.25, "share_of_draws": 0.001},
+      {"series": "TH1.1 and TH2", "months_from": 6.25, "months_to": 6.5, "share_of_draws": 0.0005},
+      {"series": "TH1.1 and TH2", "months_from": 6.5, "months_to": 6.75, "share_of_draws": 0.0005},
+      {"series": "TH1.1 and TH2", "months_from": 6.75, "months_to": 7.0, "share_of_draws": 0.001},
+      {"series": "TH1.1 and TH2", "months_from": 7.0, "months_to": 7.25, "share_of_draws": 0.0005},
+      {"series": "TH1.1 and TH2", "months_from": 7.25, "months_to": 7.5, "share_of_draws": 0.0005},
+      {"series": "TH1.1 and TH2", "months_from": 7.5, "months_to": 7.75, "share_of_draws": 0.0},
+      {"series": "TH1.1 and TH2", "months_from": 7.75, "months_to": 8.0, "share_of_draws": 0.0},
+      {"series": "TH1.1 and TH2", "months_from": 8.0, "months_to": 8.25, "share_of_draws": 0.0}
+     ]
+    }
+   ]
+  }
+ ]
+}
